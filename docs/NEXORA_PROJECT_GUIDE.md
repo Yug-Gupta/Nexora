@@ -197,12 +197,15 @@ verified `ProvenanceRecord`s on every `QueryAnswer`.
 ├── .dockerignore
 ├── .env.example
 ├── .gitignore
+├── .gitattributes                # consistent line endings across platforms
 ├── .streamlit/config.toml
 ├── requirements.txt
 ├── requirements-dev.txt
 ├── pyproject.toml                # ruff + pytest configuration
 ├── Dockerfile
 ├── docker-compose.yml
+├── CHANGELOG.md
+├── SECURITY.md
 └── LICENSE
 ```
 

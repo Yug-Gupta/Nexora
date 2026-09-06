@@ -1,0 +1,14 @@
+# Normalise line endings for a consistent history across platforms.
+* text=auto
+
+*.py          text eol=lf
+*.md          text eol=lf
+*.toml        text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+*.txt         text eol=lf
+Dockerfile    text eol=lf
+.gitignore    text eol=lf
+.dockerignore text eol=lf
+.env.example  text eol=lf
+.gitattributes text eol=lf

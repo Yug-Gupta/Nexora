@@ -28,9 +28,6 @@ select = [
     "C4",  # flake8-comprehensions
     "SIM", # flake8-simplify
 ]
-ignore = [
-    "SIM117", # nested with-contexts read better inline for 3.9 support
-]
 
 [tool.ruff.lint.per-file-ignores]
 # Long lines inside CSS and prompt templates are intentional content,
