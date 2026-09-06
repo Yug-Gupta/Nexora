@@ -351,6 +351,7 @@ simply shown without one.
 | --- | --- |
 | "Could not reach the Neo4j server" | The database is not running or the URI/port is wrong. Start it and verify `NEO4J_URI`. |
 | "Neo4j rejected the credentials" | Wrong `NEO4J_USER` / `NEO4J_PASSWORD`. |
+| `Neo4j rejected the credentials` on first run | The `.env` placeholder password `change_me` was never replaced. Set `NEO4J_PASSWORD` to the password your Neo4j server was started with (e.g. `password` for the sample `NEO4J_AUTH=neo4j/password`). |
 | "Could not reach the Ollama service" | Ollama is not running or `OLLAMA_BASE_URL` is wrong. |
 | "The requested model is not installed" | Run `ollama list`; pull the model with `ollama pull <tag>`. |
 | "No entities could be extracted" | The model returned unusable JSON, or the text is too short/vague. Confirm the model works in `ollama run <tag>`. |

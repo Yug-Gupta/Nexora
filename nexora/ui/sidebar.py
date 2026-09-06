@@ -90,6 +90,11 @@ def render_sidebar() -> None:
                 type="password",
                 key="field_password",
             )
+            if password in ("", "change_me"):
+                st.caption(
+                    ":orange[Placeholder or empty password detected - set it "
+                    "to the password your Neo4j server actually uses.]"
+                )
 
             st.markdown("**Local model service (Ollama)**")
             ollama_url = st.text_input(
