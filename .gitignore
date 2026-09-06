@@ -1,0 +1,23 @@
+# Environment / secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Streamlit runtime state
+.streamlit/secrets.toml
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Test + coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/

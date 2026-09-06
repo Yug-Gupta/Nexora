@@ -1,0 +1,53 @@
+services:
+  graphdb:
+    image: neo4j:latest
+    container_name: verigraph-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/password
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  modelbox:
+    image: ollama/ollama:latest
+    container_name: verigraph-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: verigraph-studio
+    ports:
+      - "8501:8501"
+    environment:
+      - NEO4J_URI=bolt://graphdb:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=password
+      - OLLAMA_BASE_URL=http://modelbox:11434
+      - OLLAMA_MODEL=llama3.2
+    depends_on:
+      graphdb:
+        condition: service_healthy
+      modelbox:
+        condition: service_healthy
+
+volumes:
+  neo4j_data:
+  ollama_data:
