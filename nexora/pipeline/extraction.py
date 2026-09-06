@@ -97,7 +97,9 @@ def _parse_entities(
         if not name:
             continue
         if len(name) > _MAX_ENTITY_NAME_LENGTH:
-            logger.debug("Dropping entity name longer than %d chars", _MAX_ENTITY_NAME_LENGTH)
+            logger.debug(
+                "Dropping entity name longer than %d chars", _MAX_ENTITY_NAME_LENGTH
+            )
             continue
         if name.casefold() in seen:
             continue

@@ -5,10 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from nexora.errors import InferenceError, SourceError
-from nexora.llm.gateway import InferenceGateway
-from nexora.pipeline import extraction
 from nexora.pipeline.extraction import (
     _locate_json_payload,
     _parse_entities,
@@ -37,16 +34,27 @@ class _FakeGateway:
 def _payload():
     return {
         "entities": [
-            {"name": "Aster Systems", "type": "ORGANIZATION",
-             "summary": "a climate company"},
+            {
+                "name": "Aster Systems",
+                "type": "ORGANIZATION",
+                "summary": "a climate company",
+            },
             {"name": "Priya Anand", "type": "PERSON", "summary": "founder"},
             {"name": "Cirrus", "type": "product", "summary": "weather platform"},
         ],
         "relations": [
-            {"source": "Aster Systems", "target": "Cirrus", "type": "built",
-             "context": "Aster built Cirrus"},
-            {"source": "Priya Anand", "target": "Aster Systems",
-             "type": "founded", "context": "founder"},
+            {
+                "source": "Aster Systems",
+                "target": "Cirrus",
+                "type": "built",
+                "context": "Aster built Cirrus",
+            },
+            {
+                "source": "Priya Anand",
+                "target": "Aster Systems",
+                "type": "founded",
+                "context": "founder",
+            },
         ],
     }
 
@@ -61,7 +69,9 @@ def test_extract_graph_elements_happy_path():
 
 
 def test_locale_json_payload_strips_fences_and_prose():
-    wrapped = "Here is your result:\n```json\n" + json.dumps(_payload()) + "\n```\nDone."
+    wrapped = (
+        "Here is your result:\n```json\n" + json.dumps(_payload()) + "\n```\nDone."
+    )
     parsed = json.loads(_locate_json_payload(wrapped))
     assert parsed["entities"][0]["name"] == "Aster Systems"
 

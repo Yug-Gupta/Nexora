@@ -64,7 +64,7 @@ class Neo4jConnector:
         except Exception as exc:  # pragma: no cover - best effort cleanup
             logger.warning("Ignored error while closing driver: %s", exc)
 
-    def __enter__(self) -> "Neo4jConnector":
+    def __enter__(self) -> Neo4jConnector:
         return self
 
     def __exit__(self, *exc_info: object) -> None:

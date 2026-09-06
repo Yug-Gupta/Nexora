@@ -83,7 +83,8 @@ def _render_danger_zone() -> None:
             assistant.reset_graph()
             remember_overview(None)
             st.session_state.pop("last_probes", None)
-            st.success("The knowledge graph has been erased.")
+            st.toast("The knowledge graph has been erased.")
+            st.rerun()
         except AppError as exc:
             present_error(exc, hint="graph reset")
     if col_no.button("Cancel"):

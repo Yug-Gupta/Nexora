@@ -15,7 +15,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import ollama
 from ollama import Client as OllamaClient
 
 from nexora.errors import InferenceError, translate_inference_failure
@@ -83,14 +82,26 @@ class InferenceGateway:
             raise translate_inference_failure(exc) from exc
         return _extract_model_tags(response)
 
-    def model_is_installed(self, model_name: str | None = None) -> bool:
-        """Check whether a tag exists, tolerating the ``:latest`` suffix."""
+    def model_is_installed(
+        self,
+        model_name: str | None = None,
+        *,
+        installed: list[str] | None = None,
+    ) -> bool:
+        """Check whether a tag exists, tolerating the ``:latest`` suffix.
+
+        ``installed`` may be passed in when the caller already holds a fresh
+        model list (e.g. from :meth:`available_models`), avoiding a second
+        round-trip to the Ollama server.
+        """
         wanted = (model_name or self.default_model).strip()
         base, _, tag = wanted.partition(":")
-        for installed in self.available_models():
-            if installed == wanted:
+        if installed is None:
+            installed = self.available_models()
+        for current in installed:
+            if current == wanted:
                 return True
-            installed_base, _, installed_tag = installed.partition(":")
+            installed_base, _, installed_tag = current.partition(":")
             if installed_base == base and (
                 not tag or tag == installed_tag or installed_tag == "latest"
             ):

@@ -23,11 +23,12 @@ def _select_source() -> str | None:
         key="sample_pick",
         label_visibility="collapsed",
     )
-    if picked != "Custom text":
-        if st.button("Load this example into the editor", use_container_width=True):
-            st.session_state["src_text"] = SAMPLE_DOCUMENTS[picked]
-            st.session_state["src_label"] = picked
-            st.rerun()
+    if picked != "Custom text" and st.button(
+        "Load this example into the editor", use_container_width=True
+    ):
+        st.session_state["src_text"] = SAMPLE_DOCUMENTS[picked]
+        st.session_state["src_label"] = picked
+        st.rerun()
     return picked
 
 
@@ -39,7 +40,9 @@ def _run_ingestion() -> None:
         return
     try:
         assistant = get_assistant()
-        with st.spinner("Extracting entities and relationships with the local model..."):
+        with st.spinner(
+            "Extracting entities and relationships with the local model..."
+        ):
             report = assistant.ingest_document(
                 document_text=text,
                 source_label=label,
@@ -72,7 +75,9 @@ def _render_ingest_report(report: IngestReport) -> None:
             "endpoint entity was not present in the graph."
         )
 
-    tab_entities, tab_relations = st.tabs(["Extracted entities", "Extracted relationships"])
+    tab_entities, tab_relations = st.tabs(
+        ["Extracted entities", "Extracted relationships"]
+    )
     with tab_entities:
         if report.entities:
             st.dataframe(

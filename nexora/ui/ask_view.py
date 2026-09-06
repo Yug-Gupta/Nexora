@@ -19,10 +19,11 @@ def _question_picker() -> None:
         key="q_pick",
         help="Select an example to load it into the editor.",
     )
-    if suggestion != "Custom question":
-        if st.button("Use this suggestion", use_container_width=True):
-            st.session_state["question_text"] = suggestion
-            st.rerun()
+    if suggestion != "Custom question" and st.button(
+        "Use this suggestion", use_container_width=True
+    ):
+        st.session_state["question_text"] = suggestion
+        st.rerun()
 
 
 def _ask() -> None:
@@ -108,7 +109,9 @@ def render() -> None:
             key="question_text",
             height=120,
             label_visibility="collapsed",
-            placeholder="e.g. Who founded Aster Systems and which product did it build?",
+            placeholder=(
+                "e.g. Who founded Aster Systems and which product did it build?"
+            ),
         )
         ask_clicked = st.form_submit_button(
             "Get grounded answer", type="primary", use_container_width=True

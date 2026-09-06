@@ -77,7 +77,9 @@ def _as_int(raw: str | None, fallback: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, value))
 
 
-def _as_float(raw: str | None, fallback: float, minimum: float, maximum: float) -> float:
+def _as_float(
+    raw: str | None, fallback: float, minimum: float, maximum: float
+) -> float:
     """Parse a float and clamp it into ``[minimum, maximum]``."""
     if raw is None:
         return fallback
@@ -109,7 +111,7 @@ class Settings:
     llm_timeout: float = 300.0
     log_level: str = "INFO"
 
-    def with_overrides(self, **changes: object) -> "Settings":
+    def with_overrides(self, **changes: object) -> Settings:
         """Return a new settings record with only ``changes`` applied."""
         return replace(self, **changes)
 
@@ -129,7 +131,7 @@ class Settings:
         )
 
     @classmethod
-    def from_environment(cls) -> "Settings":
+    def from_environment(cls) -> Settings:
         """Build settings from the process environment plus an optional ``.env``.
 
         Real environment variables take precedence over values found in the
@@ -145,7 +147,9 @@ class Settings:
             neo4j_user=env.get("NEO4J_USER", _ENV_DEFAULTS["neo4j_user"]),
             neo4j_password=env.get("NEO4J_PASSWORD", ""),
             neo4j_database=env.get("NEO4J_DATABASE") or None,
-            ollama_base_url=env.get("OLLAMA_BASE_URL", _ENV_DEFAULTS["ollama_base_url"]),
+            ollama_base_url=env.get(
+                "OLLAMA_BASE_URL", _ENV_DEFAULTS["ollama_base_url"]
+            ),
             model_name=env.get("OLLAMA_MODEL", _ENV_DEFAULTS["model_name"]),
             retrieval_depth=_as_int(
                 env.get("NEXORA_RETRIEVAL_DEPTH"),

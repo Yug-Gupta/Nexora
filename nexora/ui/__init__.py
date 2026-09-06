@@ -35,7 +35,7 @@ def main() -> None:
     sidebar.render_sidebar()
 
     tabs = st.tabs([label for label, _ in _NAV])
-    for tab, (_, render) in zip(tabs, _NAV):
+    for tab, (_, render) in zip(tabs, _NAV, strict=True):
         with tab:
             render()
 

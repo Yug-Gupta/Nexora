@@ -8,8 +8,9 @@ and exposes exactly the read and write operations the pipeline needs.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 from neo4j.graph import Node, Relationship
 
@@ -112,7 +113,9 @@ class KnowledgeBase:
             )
             return [dict(record) for record in cursor]
 
-    def grow_neighbourhood(self, seed_id: str, depth: int, window: int) -> list[dict[str, Any]]:
+    def grow_neighbourhood(
+        self, seed_id: str, depth: int, window: int
+    ) -> list[dict[str, Any]]:
         """Walk up to ``depth`` hops from one seed and describe each route."""
         with self._session() as session:
             cursor = session.run(
@@ -161,7 +164,7 @@ class KnowledgeBase:
         for index, edge in enumerate(edges):
             left = nodes[index].get("name", "?")
             right = nodes[index + 1].get("name", "?")
-            kind = edge.get("kind") if "kind" in edge else "?"
+            kind = edge.get("kind") or "?"
             steps.append(f"{left} --[{kind}]-- {right}")
         return tuple(steps)
 

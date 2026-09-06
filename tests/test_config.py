@@ -36,7 +36,8 @@ def test_retrieval_depth_is_clamped(monkeypatch):
 def test_dotenv_used_as_fallback_when_env_missing(monkeypatch, tmp_path):
     env_file = tmp_path / "env"
     env_file.write_text(
-        'NEO4J_URI="bolt://from-file:1111"\nNEO4J_USER=neo4j\n# comment\n', encoding="utf-8"
+        'NEO4J_URI="bolt://from-file:1111"\nNEO4J_USER=neo4j\n# comment\n',
+        encoding="utf-8",
     )
     for key in ("NEO4J_URI", "NEO4J_USER"):
         monkeypatch.delenv(key, raising=False)
@@ -70,8 +71,6 @@ def test_signature_changes_when_credentials_change():
 
 def test_read_dotenv_ignores_malformed_lines(tmp_path):
     env_file = tmp_path / "env"
-    env_file.write_text(
-        "GOOD=1\n\n# c\nNOEQUALS\nSINGLE='quoted'\n", encoding="utf-8"
-    )
+    env_file.write_text("GOOD=1\n\n# c\nNOEQUALS\nSINGLE='quoted'\n", encoding="utf-8")
     loaded = config._read_dotenv(env_file)
     assert loaded == {"GOOD": "1", "SINGLE": "quoted"}

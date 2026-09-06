@@ -1,0 +1,40 @@
+# Tool configuration for Nexora (pytest + ruff).
+# Runtime dependencies are kept in requirements.txt so Docker and CI have a
+# single source of truth; this file only configures the development toolchain.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+python_files = ["test_*.py"]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:streamlit.*",
+    "ignore::DeprecationWarning:ollama.*",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+src = ["nexora", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "SIM117", # nested with-contexts read better inline for 3.9 support
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Long lines inside CSS and prompt templates are intentional content,
+# not formatting slip-ups.
+"nexora/ui/theme.py" = ["E501"]
+"nexora/llm/prompts.py" = ["E501"]
+"tests/*" = ["B008", "S101"]

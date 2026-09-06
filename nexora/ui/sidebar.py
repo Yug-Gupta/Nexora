@@ -6,14 +6,15 @@ import html
 
 import streamlit as st
 
-from nexora.config import Settings
 from nexora.ui.state import current_settings, reset_settings, update_settings
 from nexora.ui.theme import BRAND, VERSION, render_raw
 
 
 def _render_service_summary() -> None:
     """Compact status dots for the services most recently probed."""
-    probes = {probe.component: probe for probe in st.session_state.get("last_probes", [])}
+    probes = {
+        probe.component: probe for probe in st.session_state.get("last_probes", [])
+    }
     if not probes:
         st.caption("Run diagnostics on the System tab to see service health.")
         return
@@ -29,11 +30,15 @@ def _render_service_summary() -> None:
         if probe is None:
             continue
         label = labels.get(component, component)
-        dot = "<span class='dot dot-ok'></span>" if probe.available else (
-            "<span class='dot dot-bad'></span>"
+        dot = (
+            "<span class='dot dot-ok'></span>"
+            if probe.available
+            else ("<span class='dot dot-bad'></span>")
         )
-        body = "ready" if probe.available and component == "Configured model" else (
-            html.escape(str(probe.message)) if probe.message else "unavailable"
+        body = (
+            "ready"
+            if probe.available and component == "Configured model"
+            else (html.escape(str(probe.message)) if probe.message else "unavailable")
         )
         lines.append(
             f"<div style='margin:0.15rem 0;'>{dot}<b>{html.escape(label)}</b> "
@@ -41,9 +46,7 @@ def _render_service_summary() -> None:
         )
     render_raw(
         "<div style='background:#FFFFFF;border:1px solid #E6E2F2;border-radius:10px;"
-        "padding:0.55rem 0.8rem;'>"
-        + "".join(lines)
-        + "</div>"
+        "padding:0.55rem 0.8rem;'>" + "".join(lines) + "</div>"
     )
 
 

@@ -60,22 +60,26 @@ RETURN count(rel) AS linked
 
 # Retrieval --------------------------------------------------------------------
 # Entry-point search: a node is a candidate when any question keyword shows
-# up inside its name, category or summary text.
+# up inside its name, category or summary text. Candidates are scored by how
+# many distinct terms they match and ranked before the LIMIT is applied, so
+# the most relevant seeds are never cut off by an alphabetical truncation.
 SEARCH_ENTRY_POINTS = f"""
 MATCH (entity:{NODE_LABEL})
-WHERE any(
+WITH entity, [
     term IN $terms
     WHERE toLower(entity.name) CONTAINS term
        OR toLower(entity.kind) CONTAINS term
        OR toLower(entity.summary) CONTAINS term
-)
+] AS matched_terms
+WHERE size(matched_terms) > 0
 RETURN entity.entity_id AS entity_id,
        entity.name AS name,
        entity.kind AS kind,
        entity.summary AS summary,
        entity.doc_ref AS doc_label,
-       entity.excerpt AS excerpt
-ORDER BY entity.name
+       entity.excerpt AS excerpt,
+       size(matched_terms) AS score
+ORDER BY score DESC, entity.name, entity.entity_id
 LIMIT $limit
 """
 
@@ -89,6 +93,7 @@ MATCH route = (seed:{NODE_LABEL})-[:{REL_LABEL}*1..{depth}]-(hop:{NODE_LABEL})
 WHERE seed.entity_id = $seed_id
   AND NOT hop.entity_id = $seed_id
 RETURN route
+ORDER BY length(route), hop.name
 LIMIT $window
 """
 
@@ -108,7 +113,10 @@ COUNT_NODES = f"MATCH (entity:{NODE_LABEL}) RETURN count(entity) AS total"
 COUNT_EDGES = f"MATCH (:{NODE_LABEL})-[rel:{REL_LABEL}]->() RETURN count(rel) AS total"
 COUNT_DOCUMENTS = f"MATCH (doc:{DOC_LABEL}) RETURN count(doc) AS total"
 DISTINCT_SOURCES = (
-    f"MATCH (doc:{DOC_LABEL}) "
-    "RETURN collect(DISTINCT doc.label) AS labels"
+    f"MATCH (doc:{DOC_LABEL}) RETURN collect(DISTINCT doc.label) AS labels"
 )
-WIPE_GRAPH = "MATCH (node) DETACH DELETE node"
+# Only nodes that belong to Nexora's own schema are erased, so a shared or
+# mixed-use database is never collateral damage.
+WIPE_GRAPH = (
+    f"MATCH (node) WHERE node:{NODE_LABEL} OR node:{DOC_LABEL} DETACH DELETE node"
+)

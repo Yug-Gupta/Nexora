@@ -33,7 +33,9 @@ def update_settings(updated: Settings) -> None:
         try:
             previous[1].close()
         except Exception:
-            logger.debug("Ignored error while closing previous assistant", exc_info=True)
+            logger.debug(
+                "Ignored error while closing previous assistant", exc_info=True
+            )
     st.session_state["settings"] = updated
     st.session_state.pop("assistant_slot", None)
     st.session_state.pop("cached_overview", None)
@@ -55,7 +57,9 @@ def get_assistant() -> KnowledgeAssistant:
         try:
             slot[1].close()
         except Exception:
-            logger.debug("Ignored error while closing previous assistant", exc_info=True)
+            logger.debug(
+                "Ignored error while closing previous assistant", exc_info=True
+            )
     assistant = KnowledgeAssistant(settings)
     st.session_state["assistant_slot"] = (settings.signature(), assistant)
     st.session_state.pop("cached_overview", None)

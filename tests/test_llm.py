@@ -48,8 +48,9 @@ def test_format_context_piece_tolerates_empty_fields():
 
 def test_build_answer_prompt_lists_entries_and_question():
     pieces = [
-        ContextPiece(name="Alice", kind="PERSON", summary="founder",
-                     document="d", route=()),
+        ContextPiece(
+            name="Alice", kind="PERSON", summary="founder", document="d", route=()
+        ),
     ]
     prompt = build_answer_prompt("Who is Alice?", pieces)
     assert "Who is Alice?" in prompt
@@ -63,6 +64,7 @@ def test_allowed_entity_types_are_upper_case():
 
 
 # --- gateway response extraction ---------------------------------------------
+
 
 class _Msg:
     content = "plain-content"

@@ -1,0 +1,29 @@
+# Keep secrets, virtual environments, caches and local tooling out of the
+# Docker build context. Only what the runtime image needs is copied in.
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Tests, docs and CI are not part of the image
+tests/
+docs/
+.github/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

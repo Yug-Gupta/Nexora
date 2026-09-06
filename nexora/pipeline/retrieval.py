@@ -20,11 +20,53 @@ from nexora.models import ContextPiece
 logger = logging.getLogger(__name__)
 
 _STOPWORDS = {
-    "a", "an", "the", "and", "or", "but", "of", "to", "in", "on", "at",
-    "for", "with", "about", "what", "which", "who", "whom", "whose",
-    "when", "where", "why", "how", "does", "did", "is", "are", "was",
-    "were", "do", "be", "it", "its", "this", "that", "their", "there",
-    "from", "by", "as", "not", "no", "have", "has", "had", "can", "could",
+    "a",
+    "an",
+    "the",
+    "and",
+    "or",
+    "but",
+    "of",
+    "to",
+    "in",
+    "on",
+    "at",
+    "for",
+    "with",
+    "about",
+    "what",
+    "which",
+    "who",
+    "whom",
+    "whose",
+    "when",
+    "where",
+    "why",
+    "how",
+    "does",
+    "did",
+    "is",
+    "are",
+    "was",
+    "were",
+    "do",
+    "be",
+    "it",
+    "its",
+    "this",
+    "that",
+    "their",
+    "there",
+    "from",
+    "by",
+    "as",
+    "not",
+    "no",
+    "have",
+    "has",
+    "had",
+    "can",
+    "could",
 }
 
 _WORD_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_'./+&*-]{1,}")
@@ -56,7 +98,10 @@ def _rank_seeds(seeds: list[dict], terms: list[str]) -> list[dict]:
     """Order candidate seeds by relevance, breaking ties alphabetically."""
     return sorted(
         seeds,
-        key=lambda seed: (-_match_score(seed, terms), str(seed.get("name", "")).casefold()),
+        key=lambda seed: (
+            -_match_score(seed, terms),
+            str(seed.get("name", "")).casefold(),
+        ),
     )
 
 
@@ -122,6 +167,8 @@ def collect_context(
         )
 
     for seed in chosen:
+        if len(pieces) >= settings.context_cap:
+            break
         neighbours = store.grow_neighbourhood(
             seed_id=seed["entity_id"],
             depth=settings.retrieval_depth,

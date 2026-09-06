@@ -139,14 +139,15 @@ class KnowledgeAssistant:
                 )
             )
 
+        installed_models: list[str] | None = None
         try:
-            installed = self._gateway.available_models()
+            installed_models = self._gateway.available_models()
             probes.append(
                 HealthProbe(
                     component="Model service",
                     available=True,
-                    message=f"{len(installed)} model(s) available.",
-                    extra=tuple(installed),
+                    message=f"{len(installed_models)} model(s) available.",
+                    extra=tuple(installed_models),
                 )
             )
         except Exception as exc:
@@ -158,8 +159,10 @@ class KnowledgeAssistant:
                 )
             )
 
-        try:
-            model_ready = self._gateway.model_is_installed()
+        if installed_models is not None:
+            model_ready = self._gateway.model_is_installed(
+                model_name=self.settings.model_name, installed=installed_models
+            )
             probes.append(
                 HealthProbe(
                     component="Configured model",
@@ -171,7 +174,7 @@ class KnowledgeAssistant:
                     ),
                 )
             )
-        except Exception:
+        else:
             probes.append(
                 HealthProbe(
                     component="Configured model",
@@ -190,7 +193,7 @@ class KnowledgeAssistant:
         self._connector.close()
         logger.info("KnowledgeAssistant closed")
 
-    def __enter__(self) -> "KnowledgeAssistant":
+    def __enter__(self) -> KnowledgeAssistant:
         return self
 
     def __exit__(self, *exc_info: object) -> None:

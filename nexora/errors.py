@@ -81,14 +81,19 @@ def translate_inference_failure(exc: Exception) -> InferenceError:
     """Map an Ollama SDK failure onto a user-friendly :class:`InferenceError`."""
     kind = type(exc).__name__
     lowered = str(exc).lower()
-    if "connect" in lowered or "connection" in lowered or isinstance(
-        exc, ConnectionError
+    if (
+        "connect" in lowered
+        or "connection" in lowered
+        or isinstance(exc, ConnectionError)
     ):
         message = "Could not reach the Ollama service. Is it running?"
     elif "not found" in lowered or "pull" in lowered:
         message = "The requested model is not installed on the Ollama server."
     elif "timeout" in lowered:
-        message = "The Ollama service took too long to answer. Try again or use a faster model."
+        message = (
+            "The Ollama service took too long to answer. "
+            "Try again or use a faster model."
+        )
     else:
         message = "The local language model could not complete the request."
     return InferenceError(message, detail=f"{kind}: {exc}")

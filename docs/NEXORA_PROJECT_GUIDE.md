@@ -22,7 +22,7 @@ only open one file to understand this project, open this one.
 | App entry point | `app.py` (Streamlit) |
 | Purpose | GraphRAG over your own documents with a local LLM |
 | Main capabilities | Document ingestion, entity/relation extraction, Neo4j knowledge graph, multi-hop retrieval, grounded answer generation, provenance/citations, live diagnostics |
-| Technology stack | Python 3.9+, Streamlit, Neo4j (official driver), Ollama (official client), Docker Compose (optional), pytest |
+| Technology stack | Python 3.10+, Streamlit, Neo4j (official driver), Ollama (official client), Docker Compose (optional), pytest, ruff |
 
 The package identity constants live in `nexora/__init__.py`:
 
@@ -193,13 +193,17 @@ verified `ProvenanceRecord`s on every `QueryAnswer`.
 │   ├── test_llm.py
 │   └── test_service.py
 ├── docs/NEXORA_PROJECT_GUIDE.md  # this document
+├── .github/workflows/ci.yml      # lint + test pipeline on push / PR
+├── .dockerignore
 ├── .env.example
 ├── .gitignore
 ├── .streamlit/config.toml
 ├── requirements.txt
 ├── requirements-dev.txt
+├── pyproject.toml                # ruff + pytest configuration
 ├── Dockerfile
-└── docker-compose.yml
+├── docker-compose.yml
+└── LICENSE
 ```
 
 ### Module-by-module reference
@@ -276,6 +280,9 @@ verified `ProvenanceRecord`s on every `QueryAnswer`.
 - **Dependencies:** db + llm + pipeline layers.
 - **Notes:** enforces `_MIN_DOCUMENT_CHARS = 20`; registers the document before
   saving entities so provenance exists even for relation-less documents.
+  `health_report()` fetches the installed-model list exactly once and reuses it
+  for both the *Model service* and the *Configured model* probes, so a health
+  check never issues two redundant `ollama list` calls.
 
 #### `nexora/db/__init__.py`
 Docstring-only marker.
@@ -301,15 +308,19 @@ Docstring-only marker.
   - `UPSERT_DOCUMENT` — MERGE a Document by label; store text + first-seen
     timestamp.
   - `UPSERT_RELATION` — only creates `RELATED_TO` when both endpoints exist.
-  - `SEARCH_ENTRY_POINTS` — keyword match over name/kind/summary.
+  - `SEARCH_ENTRY_POINTS` — keyword match over name/kind/summary, scored by
+    the number of distinct terms matched and ranked **before** the `LIMIT`, so
+    the most relevant seeds are never truncated alphabetically.
   - `expansion_query(depth)` — variable-length multi-hop walk (the only
-    interpolated Cypher; depth is validated to an int first).
+    interpolated Cypher; depth is validated to an int first). Results are
+    ordered by route length so the shortest route to each entity is seen first.
   - `SCHEMA_BOOTSTRAP` — optional uniqueness constraints.
   - `COUNT_NODES`, `COUNT_EDGES`, `COUNT_DOCUMENTS`, `DISTINCT_SOURCES`,
     `WIPE_GRAPH`.
 - **Dependencies:** none (pure strings/functions).
 - **Security:** every value is parameterised (`$name`); only the integer depth
-  is embedded, after validation.
+  is embedded, after validation. `WIPE_GRAPH` deletes only `Entity` and
+  `Document` nodes, never unrelated data in a shared database.
 
 #### `nexora/db/repository.py`
 - **Purpose:** graph read/write operations for the pipeline.
@@ -331,9 +342,11 @@ Docstring-only marker.
 #### `nexora/llm/gateway.py`
 - **Purpose:** sole wrapper around the Ollama client.
 - **Class:** `InferenceGateway(base_url, default_model, timeout_seconds=300)`.
-- **Methods:** `available_models()`, `model_is_installed(name=None)` (tolerates
-  the `:latest` suffix), `complete(prompt, model_name=None, *,
-  expect_json=False)`.
+- **Methods:** `available_models()`,
+  `model_is_installed(model_name=None, *, installed=None)` (tolerates the
+  `:latest` suffix; an already-fetched model list may be passed in via
+  `installed` to avoid a second server round-trip), `complete(prompt,
+  model_name=None, *, expect_json=False)`.
 - **Compatibility:** helper functions `_extract_chat_content` and
   `_extract_model_tags` accept **both** the typed pydantic responses returned
   by `ollama>=0.2` (`ChatResponse`, `ListResponse`) **and** the plain dicts
@@ -374,6 +387,10 @@ Docstring-only marker.
 - **Errors:** `ContextError` when no terms, no seeds, or no connected context.
 - **Outputs:** `(pieces, seed_names, audit)`; every piece may carry the graph
   `route` used to reach it.
+- **Notes:** seed discovery already ranks matches in Cypher (see
+  `SEARCH_ENTRY_POINTS`), so the pool fetched by `locate_entry_points` is the
+  most relevant one, not an alphabetical slice. Neighbourhood expansion stops
+  as soon as the context cap is reached — no needless extra queries.
 
 #### `nexora/pipeline/answering.py`
 - **Purpose:** evidence → answer + verified citations.
@@ -515,18 +532,26 @@ MERGE (s)-[r:RELATED_TO {kind: $kind}]->(o)
 SET r.rationale = $rationale, r.doc_ref = $doc_label
 RETURN count(r) AS linked
 
-// Multi-hop expansion (depth is an integer embedded by expansion_query)
+// Multi-hop expansion (depth is an integer embedded by expansion_query);
+// shortest routes are returned first so each entity is seen via its closest hop
 MATCH route = (seed:Entity)-[:RELATED_TO*1..2]-(hop:Entity)
 WHERE seed.entity_id = $seed_id AND NOT hop.entity_id = $seed_id
-RETURN route LIMIT $window
+RETURN route
+ORDER BY length(route), hop.name
+LIMIT $window
 
-// Keyword entry-point search
+// Keyword entry-point search — scored before the LIMIT so the pool holds the
+// most relevant candidates rather than an alphabetical slice
 MATCH (e:Entity)
-WHERE any(term IN $terms
+WITH e, [term IN $terms
   WHERE toLower(e.name) CONTAINS term
      OR toLower(e.kind) CONTAINS term
-     OR toLower(e.summary) CONTAINS term)
-RETURN e.entity_id AS entity_id, e.name AS name, ... LIMIT $limit
+     OR toLower(e.summary) CONTAINS term] AS matched_terms
+WHERE size(matched_terms) > 0
+RETURN e.entity_id AS entity_id, e.name AS name, ...,
+       size(matched_terms) AS score
+ORDER BY score DESC, e.name, e.entity_id
+LIMIT $limit
 ```
 
 ### Indexes / constraints
@@ -551,7 +576,7 @@ MERGE works without them; they make it faster and safer.
 | App says “Could not reach the Neo4j server” | Start Neo4j; check `NEO4J_URI`/port; on Compose use `bolt://graphdb:7687`. |
 | “Neo4j rejected the credentials” | Verify `NEO4J_USER`/`NEO4J_PASSWORD`; reset auth with `NEO4J_AUTH`. |
 | First ingest fails with schema error | If the DB user lacks schema rights, Nexora logs “schema bootstrap skipped” and continues; MERGE needs no constraints. |
-| Graph has stale/old-shape data after an upgrade | The app does not migrate existing graphs. Use “Erase the entire graph” on the System tab (or `MATCH (n) DETACH DELETE n`) and re-ingest. |
+| Graph has stale/old-shape data after an upgrade | The app does not migrate existing graphs. Use “Erase the entire graph” on the System tab (it deletes only Nexora `Entity`/`Document` nodes) and re-ingest. |
 
 ---
 
@@ -649,12 +674,14 @@ ollama pull llama3.2
 - **Start services:** Neo4j (Docker container or Compose), Ollama.
 - **Run Nexora:** `streamlit run app.py` (Streamlit auto-reloads on save).
 - **Run tests:** `python -m pytest` (or `python -m pytest -q`).
+- **Lint / format:** `ruff check .` and `ruff format .`
 - **Inspect logs:** the console running Streamlit prints `nexora` logger lines
   with timestamps (`configure_logging` installs one console handler).
 - **Stop services:** `Ctrl+C` on Streamlit; `docker stop nexora-neo4j` for the
   DB.
-- **Reset dev data:** System tab → *Erase the entire graph*, or wipe Cypher:
-  `MATCH (n) DETACH DELETE n`.
+- **Reset dev data:** System tab → *Erase the entire graph*. This deletes only
+  Nexora’s own nodes (`Entity` and `Document`), so unrelated data in a shared
+  database is left untouched.
 
 ---
 
@@ -707,16 +734,20 @@ wipe are all parameterised queries from `nexora/db/statements.py`.
 1. `derive_terms` — case-folded keywords, English stop-words removed, tokens
    ≥3 chars.
 2. `store.locate_entry_points` — nodes whose name/kind/summary contain any
-   keyword.
-3. `_rank_seeds` — sort candidates by how many keywords they match.
-4. Top `_MAX_SEEDS_PER_QUERY` (3) seeds are expanded.
-5. `store.grow_neighbourhood(seed, retrieval_depth, context_cap)` per seed.
-6. Pieces are de-duplicated by name and capped at `context_cap`.
+   keyword. The Cypher ranks matches by how many distinct terms each node hits
+   **before** applying `LIMIT`, so the pool always holds the most relevant
+   candidates.
+3. `_rank_seeds` — sorts that pool by matched-keyword count (ties alphabetical)
+   and the top `_MAX_SEEDS_PER_QUERY` (3) seeds are expanded.
+4. `store.grow_neighbourhood(seed, retrieval_depth, context_cap)` per seed —
+   expansion stops as soon as the context cap is reached.
+5. Pieces are de-duplicated by name and capped at `context_cap`.
 
 ## 17. Multi-Hop Traversal
 
 The Cypher variable-length pattern
-`(seed)-[:RELATED_TO*1..depth]-(hop)` returns Neo4j `Path` objects.
+`(seed)-[:RELATED_TO*1..depth]-(hop)` returns Neo4j `Path` objects; results are
+ordered by route length so the shortest route to each entity is consumed first.
 `KnowledgeBase._decompose_path`/`_route_labels` convert each path into a route
 string list (`A --[built]-- B --[customer]-- C`), which is attached to the
 `ContextPiece` and later shown under each citation. This is how Nexora joins
@@ -786,6 +817,16 @@ Run the whole suite:
 python -m pytest
 ```
 
+Static checks (configured in `pyproject.toml`):
+
+```bash
+ruff check .      # lint
+ruff format .     # auto-format
+```
+
+Warnings are promoted to errors in the test run (`filterwarnings = error`), so
+resource leaks and unraisable exceptions fail CI instead of silently passing.
+
 What is tested (all offline, no Neo4j/Ollama required):
 
 - `test_config.py` — defaults, env parsing, `.env` fallback, env precedence,
@@ -794,11 +835,13 @@ What is tested (all offline, no Neo4j/Ollama required):
 - `test_extraction.py` — JSON recovery, alias fields, deduplication, endpoint
   filtering, error wrapping.
 - `test_retrieval.py` — term derivation, seed ranking, context assembly with a
-  fake store.
+  fake store, early-exit once the context cap is reached.
 - `test_answering.py` — citation parsing/verification, answer synthesis.
 - `test_llm.py` — prompt formatting, response extraction (dict vs typed
   objects), model-tag matching.
-- `test_service.py` — input validation that never reaches the network.
+- `test_service.py` — input validation that never reaches the network and
+  health-report logic exercised against fake connectors/gateways (including
+  single-fetch of the installed-model list).
 
 Cannot be tested without live services: real Cypher execution, real Ollama
 generation, health probes against a live server. Those are integration tests
@@ -864,8 +907,9 @@ Facts only — Nexora ships local, single-machine tooling:
 - **Input validation:** Cypher is fully parameterised (no string-built queries
   except the integer depth). LLM output is HTML-escaped in the UI before
   rendering to prevent markup injection.
-- **Graph scope:** the “erase” wipe deletes **all** nodes in the database —
-  only use a dedicated Nexora database, or expect collateral damage.
+- **Graph scope:** the “erase” wipe deletes **only** Nexora’s own nodes
+  (`Entity` and `Document`); unrelated data in a shared database is left
+  untouched. Still, prefer a dedicated Nexora database where possible.
 
 ## 26. Known Limitations
 

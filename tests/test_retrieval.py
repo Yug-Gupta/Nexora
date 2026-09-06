@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import pytest
-
 from nexora.config import Settings
 from nexora.errors import ContextError
-from nexora.pipeline import retrieval
 from nexora.pipeline.retrieval import _rank_seeds, collect_context, derive_terms
 
 
@@ -53,8 +51,7 @@ def test_derive_terms_empty_for_stopword_only():
 
 def test_rank_seeds_prefers_high_matching_terms():
     seeds = [
-        _seed("Weather Bureau", kind="ORGANIZATION",
-              summary="forecasting in Oslo"),
+        _seed("Weather Bureau", kind="ORGANIZATION", summary="forecasting in Oslo"),
         _seed("Priya Anand", kind="PERSON", summary="data science at Meridian"),
     ]
     terms = ["priya", "data"]
@@ -70,8 +67,12 @@ def test_rank_seeds_ties_break_alphabetically():
 def test_collect_context_returns_pieces_and_audit():
     store = FakeStore(
         seeds=[
-            _seed("Aster Systems", entity_id="ast", kind="ORGANIZATION",
-                  summary="climate analytics"),
+            _seed(
+                "Aster Systems",
+                entity_id="ast",
+                kind="ORGANIZATION",
+                summary="climate analytics",
+            ),
         ],
         neighbours={
             "ast": [
@@ -111,11 +112,53 @@ def test_collect_context_dedupes_by_name():
     store = FakeStore(
         seeds=[_seed("Shared", entity_id="a"), _seed("Shared", entity_id="b")],
         neighbours={
-            "a": [{"name": "Shared", "kind": "X", "summary": "", "doc_label": "",
-                   "excerpt": "", "route": ()}],
+            "a": [
+                {
+                    "name": "Shared",
+                    "kind": "X",
+                    "summary": "",
+                    "doc_label": "",
+                    "excerpt": "",
+                    "route": (),
+                }
+            ],
             "b": [],
         },
     )
     pieces, _, _ = collect_context("shared thing", store, Settings(context_cap=10))
     names = [p.name for p in pieces]
     assert len(names) == len(set(names))
+
+
+def _neighbour(name):
+    return {
+        "name": name,
+        "kind": "PERSON",
+        "summary": "",
+        "doc_label": "doc",
+        "excerpt": "",
+        "route": (),
+    }
+
+
+class _CountingStore(FakeStore):
+    """FakeStore that records which seeds were actually expanded."""
+
+    def __init__(self, seeds=None, neighbours=None):
+        super().__init__(seeds=seeds, neighbours=neighbours)
+        self.expanded = []
+
+    def grow_neighbourhood(self, seed_id, depth, window):
+        self.expanded.append(seed_id)
+        return super().grow_neighbourhood(seed_id, depth, window)
+
+
+def test_collect_context_stops_expanding_once_cap_is_reached():
+    store = _CountingStore(
+        seeds=[_seed("SeedA", entity_id="a"), _seed("SeedB", entity_id="b")],
+        neighbours={"a": [_neighbour(f"N{i}") for i in range(6)]},
+    )
+    pieces, _, _ = collect_context("seed a b", store, Settings(context_cap=4))
+    assert len(pieces) == 4
+    # SeedB must never be expanded once the context cap was filled by SeedA.
+    assert store.expanded == ["a"]
