@@ -1,7 +1,16 @@
+# Nexora development stack: Neo4j + Ollama + the Streamlit application.
+#
+#   docker compose up --build
+#
+# After the stack is healthy, pull a model inside the Ollama container:
+#   docker exec nexora-ollama ollama pull llama3.2
+#
+# Then open http://localhost:8501
+
 services:
   graphdb:
     image: neo4j:latest
-    container_name: verigraph-neo4j
+    container_name: nexora-neo4j
     ports:
       - "7474:7474"
       - "7687:7687"
@@ -17,7 +26,7 @@ services:
 
   modelbox:
     image: ollama/ollama:latest
-    container_name: verigraph-ollama
+    container_name: nexora-ollama
     ports:
       - "11434:11434"
     volumes:
@@ -33,7 +42,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: verigraph-studio
+    container_name: nexora-studio
     ports:
       - "8501:8501"
     environment:

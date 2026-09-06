@@ -1,7 +1,7 @@
-"""Application error taxonomy.
+"""Application error taxonomy for Nexora.
 
-Errors raised across the library carry a ``message`` that is safe to show
-to end users in the interface.  Technical details travel separately in
+Errors raised across the package carry a ``message`` that is safe to show to
+end users in the interface.  Technical details travel separately in
 ``detail`` and are intended for logs rather than the UI.
 """
 
@@ -48,8 +48,8 @@ def translate_storage_failure(exc: Exception) -> StorageError:
     """Map a driver exception onto a user-friendly :class:`StorageError`.
 
     The Neo4j driver raises distinct exception subclasses for broken
-    credentials, unreachable servers and malformed queries; we translate
-    the most common ones into actionable wording before they reach the UI.
+    credentials, unreachable servers and malformed queries; the most common
+    ones are translated into actionable wording before they reach the UI.
     """
     try:
         from neo4j.exceptions import AuthError, ServiceUnavailable, SessionExpired
@@ -64,7 +64,7 @@ def translate_storage_failure(exc: Exception) -> StorageError:
                 "Could not reach the Neo4j server at the configured address.",
                 detail=f"{type(exc).__name__}: {exc}",
             )
-    except ImportError:
+    except ImportError:  # driver not installed yet
         pass
 
     kind = type(exc).__name__
@@ -87,6 +87,8 @@ def translate_inference_failure(exc: Exception) -> InferenceError:
         message = "Could not reach the Ollama service. Is it running?"
     elif "not found" in lowered or "pull" in lowered:
         message = "The requested model is not installed on the Ollama server."
+    elif "timeout" in lowered:
+        message = "The Ollama service took too long to answer. Try again or use a faster model."
     else:
         message = "The local language model could not complete the request."
     return InferenceError(message, detail=f"{kind}: {exc}")

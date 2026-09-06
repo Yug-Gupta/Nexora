@@ -1,8 +1,8 @@
-"""Repository over the knowledge graph.
+"""Repository over the Nexora knowledge graph.
 
 :class:`KnowledgeBase` is the only module that knows the schema laid out in
-``statements``.  It converts domain records to and from graph rows and
-exposes the exact read operations the retrieval pipeline needs.
+``nexora.db.statements``.  It converts domain records to and from graph rows
+and exposes exactly the read and write operations the pipeline needs.
 """
 
 from __future__ import annotations
@@ -13,9 +13,9 @@ from typing import Any, Iterator
 
 from neo4j.graph import Node, Relationship
 
-from verigraph.db import connector, statements
-from verigraph.errors import StorageError, translate_storage_failure
-from verigraph.models import Entity, Relation, StoreOverview, entity_identifier
+from nexora.db import connector, statements
+from nexora.errors import StorageError, translate_storage_failure
+from nexora.models import Entity, Relation, StoreOverview, entity_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,7 @@ class KnowledgeBase:
 
     def __init__(self, connection: connector.Neo4jConnector) -> None:
         self._connection = connection
+        self._schema_ready = False
 
     # -- lifecycle helpers ---------------------------------------------------
 
@@ -38,10 +39,35 @@ class KnowledgeBase:
         except Exception as exc:
             raise translate_storage_failure(exc) from exc
 
+    def _ensure_schema(self) -> None:
+        """Best-effort bootstrap of uniqueness constraints (run once).
+
+        Constraints are an optimisation and a safety net, not a requirement:
+        every Cypher statement already uses MERGE on stable keys.  Schema
+        creation can be denied on managed databases, so a failure is logged
+        and ignored; real connectivity problems surface on the next write.
+        """
+        if self._schema_ready:
+            return
+        self._schema_ready = True
+        try:
+            with self._connection.session() as session:
+                for statement in statements.SCHEMA_BOOTSTRAP:
+                    session.run(statement).consume()
+            logger.info("Nexora graph schema ensured (constraints present)")
+        except Exception as exc:
+            logger.warning("Optional graph schema bootstrap skipped: %s", exc)
+
     # -- writes ---------------------------------------------------------------
 
+    def register_document(self, label: str, text: str) -> None:
+        """Record a source document so the graph keeps provenance metadata."""
+        with self._session() as session:
+            session.run(statements.UPSERT_DOCUMENT, label=label, text=text)
+
     def save_entity(self, entity: Entity) -> None:
-        """Insert or enrich a single entity node."""
+        """Insert or enrich a single entity node and link it to its document."""
+        self._ensure_schema()
         with self._session() as session:
             session.run(
                 statements.UPSERT_ENTITY,
@@ -145,13 +171,15 @@ class KnowledgeBase:
         with self._session() as session:
             node_count = session.run(statements.COUNT_NODES).single()["total"]
             edge_count = session.run(statements.COUNT_EDGES).single()["total"]
+            doc_count = session.run(statements.COUNT_DOCUMENTS).single()["total"]
             raw_labels = session.run(statements.DISTINCT_SOURCES).single()["labels"]
         sources = tuple(
-            label for label in raw_labels if label and str(label).strip()
+            sorted({str(label) for label in raw_labels if label and str(label).strip()})
         )
         return StoreOverview(
             node_count=node_count,
             edge_count=edge_count,
+            document_count=doc_count,
             sources=sources,
         )
 

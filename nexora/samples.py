@@ -1,8 +1,9 @@
-"""Curated example passages used to demo the workflow without typing.
+"""Curated example passages used to demo the Nexora workflow.
 
-The two documents below intentionally share entities (an organisation, a
-product and a person) so that a question can only be answered by joining
-facts that live in *different* documents through the graph.
+The documents below intentionally share entities (an organisation, a product
+and a person) so that a question can only be answered by joining facts that
+live in *different* documents through the graph - which exercises Nexora's
+multi-hop retrieval and provenance features.
 """
 
 from __future__ import annotations

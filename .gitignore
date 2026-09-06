@@ -1,23 +1,29 @@
 # Environment / secrets
 .env
+.env.local
+*.env
+!.env.example
 
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
 .venv/
 venv/
-*.egg-info/
+env/
 
 # Streamlit runtime state
 .streamlit/secrets.toml
+
+# Test + coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 
 # Editor / OS
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
-
-# Test + coverage artifacts
-.pytest_cache/
-.coverage
-htmlcov/

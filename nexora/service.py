@@ -1,29 +1,29 @@
 """Application facade used by the presentation layer.
 
-:class:`KnowledgeAssistant` owns the graph connector and the model gateway
-and wires them to the extraction / retrieval / answering pipeline.  The UI
-never manipulates Neo4j or Ollama directly, and every failure surfaces as
-an :class:`~verigraph.errors.AppError` subclass with a UI-safe message.
+:class:`KnowledgeAssistant` owns the graph connector and the model gateway and
+wires them to the extraction / retrieval / answering pipeline.  The UI never
+manipulates Neo4j or Ollama directly, and every failure surfaces as an
+:class:`~nexora.errors.AppError` subclass with a UI-safe message.
 """
 
 from __future__ import annotations
 
 import logging
 
-from verigraph.config import Settings
-from verigraph.db.connector import Neo4jConnector
-from verigraph.db.repository import KnowledgeBase
-from verigraph.errors import UserInputError
-from verigraph.llm.gateway import InferenceGateway
-from verigraph.pipeline.answering import synthesise_answer
-from verigraph.pipeline.extraction import extract_graph_elements
-from verigraph.pipeline.retrieval import collect_context
-from verigraph.models import (
+from nexora.config import Settings
+from nexora.db.connector import Neo4jConnector
+from nexora.db.repository import KnowledgeBase
+from nexora.errors import UserInputError
+from nexora.llm.gateway import InferenceGateway
+from nexora.models import (
     HealthProbe,
     IngestReport,
     QueryAnswer,
     StoreOverview,
 )
+from nexora.pipeline.answering import synthesise_answer
+from nexora.pipeline.extraction import extract_graph_elements
+from nexora.pipeline.retrieval import collect_context
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +43,15 @@ class KnowledgeAssistant:
         )
         self._store = KnowledgeBase(self._connector)
         self._gateway = InferenceGateway(
-            base_url=settings.ollama_url,
+            base_url=settings.ollama_base_url,
             default_model=settings.model_name,
+            timeout_seconds=settings.llm_timeout,
         )
-        logger.info("KnowledgeAssistant ready (model=%s)", settings.model_name)
+        logger.info(
+            "KnowledgeAssistant ready (model=%s, depth=%d)",
+            settings.model_name,
+            settings.retrieval_depth,
+        )
 
     # -- workflows -------------------------------------------------------------
 
@@ -68,6 +73,7 @@ class KnowledgeAssistant:
             gateway=self._gateway,
             model_name=self.settings.model_name,
         )
+        self._store.register_document(label=label, text=content)
         for entity in entities:
             self._store.save_entity(entity)
         dropped = 0
@@ -153,13 +159,14 @@ class KnowledgeAssistant:
             )
 
         try:
+            model_ready = self._gateway.model_is_installed()
             probes.append(
                 HealthProbe(
                     component="Configured model",
-                    available=self._gateway.model_is_installed(),
+                    available=model_ready,
                     message=(
                         "Ready."
-                        if self._gateway.model_is_installed()
+                        if model_ready
                         else f"'{self.settings.model_name}' not installed."
                     ),
                 )

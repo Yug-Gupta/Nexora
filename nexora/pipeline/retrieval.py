@@ -1,14 +1,21 @@
-"""Multi-hop retrieval: find starting points, then expand around them."""
+"""Multi-hop retrieval: find starting points, then expand around them.
+
+A question is decomposed into search keywords, matching entities become
+*seeds* (ranked by how many keywords they actually match), and the graph is
+walked ``retrieval_depth`` hops from each seed.  Every entity reached along a
+route becomes a context entry that also records the path used to reach it, so
+downstream stages can show exactly how each piece of evidence was discovered.
+"""
 
 from __future__ import annotations
 
 import logging
 import re
 
-from verigraph.config import Settings
-from verigraph.db.repository import KnowledgeBase
-from verigraph.errors import ContextError
-from verigraph.models import ContextPiece
+from nexora.config import Settings
+from nexora.db.repository import KnowledgeBase
+from nexora.errors import ContextError
+from nexora.models import ContextPiece
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +28,8 @@ _STOPWORDS = {
 }
 
 _WORD_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_'./+&*-]{1,}")
+
+_MAX_SEEDS_PER_QUERY = 3
 
 
 def derive_terms(question: str) -> list[str]:
@@ -35,6 +44,22 @@ def derive_terms(question: str) -> list[str]:
     return terms
 
 
+def _match_score(seed: dict, terms: list[str]) -> int:
+    """Count how many search terms appear across a seed's text fields."""
+    haystack = " ".join(
+        str(seed.get(key, "")) for key in ("name", "kind", "summary")
+    ).casefold()
+    return sum(1 for term in terms if term in haystack)
+
+
+def _rank_seeds(seeds: list[dict], terms: list[str]) -> list[dict]:
+    """Order candidate seeds by relevance, breaking ties alphabetically."""
+    return sorted(
+        seeds,
+        key=lambda seed: (-_match_score(seed, terms), str(seed.get("name", "")).casefold()),
+    )
+
+
 def collect_context(
     question: str,
     store: KnowledgeBase,
@@ -45,8 +70,8 @@ def collect_context(
     Retrieval happens in two phases:
 
     1. keyword match picks a handful of *seed* entities;
-    2. for each seed, the graph is walked ``retrieval_depth`` hops and every
-       newly reached entity becomes a candidate context piece.
+    2. for each seed, the graph is walked ``settings.retrieval_depth`` hops and
+       every newly reached entity becomes a candidate context piece.
     """
     audit: list[str] = []
     terms = derive_terms(question)
@@ -64,12 +89,15 @@ def collect_context(
             "Ingest related documents first, or rephrase with terms that "
             "appear in the graph."
         )
-    audit.append(f"{len(seeds)} matching entities found to start from")
 
-    chosen = seeds[:3]
+    ranked = _rank_seeds(seeds, terms)
+    chosen = ranked[:_MAX_SEEDS_PER_QUERY]
+    noun = "entity" if len(seeds) == 1 else "entities"
     audit.append(
-        "Starting points: " + ", ".join(seed["name"] for seed in chosen)
+        f"{len(seeds)} matching {noun} found; using the top {len(chosen)} as "
+        "starting point(s)"
     )
+    audit.append("Starting points: " + ", ".join(seed["name"] for seed in chosen))
 
     pieces: list[ContextPiece] = []
     seen_names: set[str] = set()
@@ -99,7 +127,7 @@ def collect_context(
             depth=settings.retrieval_depth,
             window=settings.context_cap,
         )
-        audit.append(f"{len(neighbours)} related nodes reached from '{seed['name']}'")
+        audit.append(f"{len(neighbours)} related node(s) reached from '{seed['name']}'")
         for row in neighbours:
             add_piece(
                 ContextPiece(

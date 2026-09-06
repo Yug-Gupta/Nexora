@@ -1,4 +1,10 @@
-"""Turn a plain-text document into entities and relations via the local model."""
+"""Turn a plain-text document into entities and relations via the local model.
+
+The module is deliberately defensive: small local models do not always emit
+clean JSON, sometimes use different field names, occasionally duplicate
+entities and frequently reference relation endpoints that were never listed.
+Every one of those failure modes is normalised or rejected here.
+"""
 
 from __future__ import annotations
 
@@ -7,15 +13,35 @@ import logging
 import re
 from typing import Any
 
-from verigraph.errors import InferenceError, SourceError
-from verigraph.llm.gateway import InferenceGateway
-from verigraph.llm.prompts import build_extraction_prompt
-from verigraph.models import Entity, Relation, truncate
+from nexora.errors import InferenceError, SourceError
+from nexora.llm.gateway import InferenceGateway
+from nexora.llm.prompts import build_extraction_prompt
+from nexora.models import Entity, Relation, truncate
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_KIND = "CONCEPT"
 _EXCERPT_LIMIT = 300
+_MAX_ENTITY_NAME_LENGTH = 120
+_MAX_PREDICATE_LENGTH = 60
+_MAX_ENTITIES = 200
+_MAX_RELATIONS = 400
+
+_ENTITY_NAME_KEYS = ("name", "label")
+_ENTITY_TYPE_KEYS = ("type", "kind", "category")
+_ENTITY_SUMMARY_KEYS = ("summary", "description")
+_REL_SUBJECT_KEYS = ("source", "subject", "from", "head")
+_REL_OBJECT_KEYS = ("target", "object", "to", "tail")
+_REL_PREDICATE_KEYS = ("type", "predicate", "relation", "label")
+_REL_CONTEXT_KEYS = ("context", "rationale", "reason")
+
+
+def _first_present(item: dict[str, Any], keys: tuple[str, ...]) -> str:
+    for key in keys:
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
 
 
 def _locate_json_payload(raw: str) -> str:
@@ -67,20 +93,27 @@ def _parse_entities(
     for item in raw_entities:
         if not isinstance(item, dict):
             continue
-        name = _clean_text(item.get("name"))
-        if not name or name.casefold() in seen:
+        name = _first_present(item, _ENTITY_NAME_KEYS)
+        if not name:
+            continue
+        if len(name) > _MAX_ENTITY_NAME_LENGTH:
+            logger.debug("Dropping entity name longer than %d chars", _MAX_ENTITY_NAME_LENGTH)
+            continue
+        if name.casefold() in seen:
             continue
         seen.add(name.casefold())
+        kind = _first_present(item, _ENTITY_TYPE_KEYS).upper() or _DEFAULT_KIND
         entities.append(
             Entity(
                 name=name,
-                kind=_clean_text(item.get("type"), _DEFAULT_KIND).upper()
-                or _DEFAULT_KIND,
-                summary=_clean_text(item.get("summary")),
+                kind=kind,
+                summary=_first_present(item, _ENTITY_SUMMARY_KEYS),
                 source_label=source_label,
                 excerpt=truncate(document_text, _EXCERPT_LIMIT),
             )
         )
+        if len(entities) >= _MAX_ENTITIES:
+            break
     return entities
 
 
@@ -91,28 +124,44 @@ def _parse_relations(
 ) -> list[Relation]:
     raw_relations = payload.get("relations", payload.get("edges", []))
     relations: list[Relation] = []
+    seen: set[tuple[str, str, str]] = set()
     if not isinstance(raw_relations, list):
         raw_relations = []
     for item in raw_relations:
         if not isinstance(item, dict):
             continue
-        subject = _clean_text(item.get("source"))
-        object_ = _clean_text(item.get("target"))
-        predicate = _clean_text(item.get("type", "MENTIONS")).upper()
+        subject = _first_present(item, _REL_SUBJECT_KEYS)
+        object_ = _first_present(item, _REL_OBJECT_KEYS)
+        predicate = _first_present(item, _REL_PREDICATE_KEYS).upper()
+        if not predicate or len(predicate) > _MAX_PREDICATE_LENGTH:
+            predicate = "MENTIONS"
         if not subject or not object_ or subject.casefold() == object_.casefold():
             continue
-        if subject.casefold() not in known_names or object_.casefold() not in known_names:
-            logger.debug("Ignoring relation with unmatched endpoint %r -> %r", subject, object_)
+        if (
+            subject.casefold() not in known_names
+            or object_.casefold() not in known_names
+        ):
+            logger.debug(
+                "Ignoring relation with unmatched endpoint %r -> %r",
+                subject,
+                object_,
+            )
             continue
+        dedupe_key = (subject.casefold(), predicate, object_.casefold())
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
         relations.append(
             Relation(
                 subject=subject,
                 object=object_,
-                predicate=predicate or "MENTIONS",
-                rationale=_clean_text(item.get("context")),
+                predicate=predicate,
+                rationale=_first_present(item, _REL_CONTEXT_KEYS),
                 source_label=source_label,
             )
         )
+        if len(relations) >= _MAX_RELATIONS:
+            break
     return relations
 
 

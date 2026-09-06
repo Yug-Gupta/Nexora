@@ -2,7 +2,8 @@
 
 :class:`Neo4jConnector` is the only place in the codebase that touches
 ``GraphDatabase.driver``.  Domain logic works against :class:`KnowledgeBase`
-objects, which in turn borrow a session from a connector.
+objects (``nexora.db.repository``), which in turn borrow a session from a
+connector.
 """
 
 from __future__ import annotations
@@ -10,8 +11,9 @@ from __future__ import annotations
 import logging
 
 from neo4j import GraphDatabase
+from neo4j.exceptions import ConfigurationError
 
-from verigraph.errors import translate_storage_failure
+from nexora.errors import StorageError, translate_storage_failure
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +21,8 @@ logger = logging.getLogger(__name__)
 class Neo4jConnector:
     """Lazy wrapper around a Neo4j driver.
 
-    The driver only opens a socket on first use, so constructing a
-    connector never blocks or fails even when the server is offline.
+    The driver only opens a socket on first use, so constructing a connector
+    never blocks or fails even when the server is offline.
     """
 
     def __init__(
@@ -33,7 +35,12 @@ class Neo4jConnector:
         self._database = database or None
         try:
             self._driver = GraphDatabase.driver(uri, auth=(user, password))
-        except Exception as exc:  # invalid URI / unsupported scheme
+        except ConfigurationError as exc:
+            raise StorageError(
+                "The Neo4j connection URI is invalid.",
+                detail=f"ConfigurationError: {exc}",
+            ) from exc
+        except Exception as exc:
             raise translate_storage_failure(exc) from exc
         logger.debug("Neo4j connector prepared for %s", uri)
 

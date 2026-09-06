@@ -1,12 +1,12 @@
-"""Prompt templates for the two model-driven stages of the pipeline.
+"""Prompt templates for the two model-driven stages of the Nexora pipeline.
 
-Keeping prompts out of the service and UI code makes them easy to audit
-and tweak without touching program logic.
+Keeping prompts out of the service and UI code makes them easy to audit and
+tweak without touching program logic.
 """
 
 from __future__ import annotations
 
-from verigraph.models import ContextPiece
+from nexora.models import ContextPiece
 
 ALLOWED_ENTITY_TYPES = (
     "PERSON",
@@ -39,6 +39,7 @@ Rules:
 - A relation may only reference entity names that appear in the "entities" array.
 - Prefer a handful of precise relations over many weak ones.
 - Do not invent entities that are not present in the document.
+- Return valid JSON with no surrounding prose or code fences.
 
 Document:
 {content}
@@ -71,7 +72,7 @@ def build_extraction_prompt(content: str) -> str:
 
 
 def format_context_piece(index: int, piece: ContextPiece) -> str:
-    """Render a single retrieved entity as a prompt entry line."""
+    """Render a single retrieved entity as a numbered prompt entry line."""
     parts = [f"[{index}] Entity: {piece.name} ({piece.kind or 'UNKNOWN'})"]
     if piece.summary:
         parts.append(f"Summary: {piece.summary}")
