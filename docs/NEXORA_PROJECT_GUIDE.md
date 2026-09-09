@@ -192,7 +192,11 @@ verified `ProvenanceRecord`s on every `QueryAnswer`.
 │   ├── test_answering.py
 │   ├── test_llm.py
 │   └── test_service.py
-├── docs/NEXORA_PROJECT_GUIDE.md  # this document
+├── docs/
+│   ├── NEXORA_PROJECT_GUIDE.md  # this document
+│   └── DEPLOYMENT.md            # hosting a public live demo on a VPS
+├── deploy/
+│   └── Caddyfile                # HTTPS reverse proxy + Basic Auth
 ├── .github/workflows/ci.yml      # lint + test pipeline on push / PR
 ├── .dockerignore
 ├── .env.example
@@ -204,6 +208,7 @@ verified `ProvenanceRecord`s on every `QueryAnswer`.
 ├── pyproject.toml                # ruff + pytest configuration
 ├── Dockerfile
 ├── docker-compose.yml
+├── docker-compose.prod.yml       # Caddy proxy overlay (used with the base)
 ├── CHANGELOG.md
 ├── SECURITY.md
 └── LICENSE

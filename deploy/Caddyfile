@@ -1,0 +1,36 @@
+# Caddy reverse proxy for a public Nexora demo.
+#
+# Used by docker-compose.prod.yml. The three placeholders below are injected
+# from your root .env file (APP_DOMAIN, AUTH_USER, AUTH_HASH) — never put real
+# secrets in this file.
+#
+# Examples:
+#   APP_DOMAIN=https://demo.example.com   (uses Let's Encrypt automatically)
+#   APP_DOMAIN=http://203.0.113.10        (plain HTTP on an IP, no TLS)
+#
+# Generate AUTH_HASH with:
+#   docker run --rm caddy:2 caddy hash-password --plaintext 'your-password'
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	# Allow the public health endpoint to stay reachable without auth.
+	@health {
+		path /_stcore/health
+	}
+	respond @health 200
+
+	# Protect everything else with HTTP Basic Auth.
+	basic_auth {
+		{$AUTH_USER} {$AUTH_HASH}
+	}
+
+	# Streamlit WebSockets are upgraded automatically by reverse_proxy.
+	reverse_proxy studio:8501
+
+	header {
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}

@@ -1,0 +1,39 @@
+# Production overlay for a public Nexora demo.
+#
+# Merges with the base file to add an HTTPS reverse proxy (Caddy) with HTTP
+# Basic Auth in front of the Streamlit app:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Secrets/domain are read from your root .env (already git-ignored):
+#   APP_DOMAIN=https://demo.example.com
+#   AUTH_USER=admin
+#   AUTH_HASH=<bcrypt hash, see docs/DEPLOYMENT.md>
+#
+# The proxy talks to the app over the internal compose network, so the app
+# itself does not need to be reachable from the internet. Close ports
+# 7474 / 7687 / 8501 / 11434 in your firewall — only 22 / 80 / 443 should be
+# open (see docs/DEPLOYMENT.md).
+
+services:
+  proxy:
+    image: caddy:2-alpine
+    container_name: nexora-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN in .env}
+      AUTH_USER: ${AUTH_USER:?set AUTH_USER in .env}
+      AUTH_HASH: ${AUTH_HASH:?set AUTH_HASH in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - studio
+
+volumes:
+  caddy_data:
+  caddy_config:

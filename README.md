@@ -180,6 +180,10 @@ docker run -d --name nexora-neo4j \
   neo4j:latest
 ```
 
+> Want a **public demo link** for your resume instead of a local setup? See the
+> [deployment guide](docs/DEPLOYMENT.md) — it hosts this exact stack on a VPS
+> with HTTPS and password protection, without changing any code.
+
 ## Configuration
 
 Every setting is optional and has a sensible local-development default. Copy
@@ -251,13 +255,17 @@ All connection-related values can also be changed at runtime from the app
 │       └── status_view.py       # diagnostics & graph overview tab
 ├── tests/                       # offline unit tests (no external services)
 ├── docs/
-│   └── NEXORA_PROJECT_GUIDE.md  # complete technical handbook
+│   ├── NEXORA_PROJECT_GUIDE.md  # complete technical handbook
+│   └── DEPLOYMENT.md            # how to host a public live demo
+├── deploy/
+│   └── Caddyfile                # HTTPS reverse proxy + Basic Auth (demo)
 ├── .github/workflows/ci.yml     # lint + test pipeline on push / PR
 ├── .env.example                 # copy to .env and fill in
 ├── .dockerignore
 ├── .gitattributes               # consistent line endings across platforms
 ├── Dockerfile                   # non-root, headless Streamlit image
 ├── docker-compose.yml           # Neo4j + Ollama + Nexora together
+├── docker-compose.prod.yml      # adds the Caddy proxy (run with the base file)
 ├── pyproject.toml               # ruff + pytest configuration
 ├── requirements.txt             # runtime dependencies
 ├── requirements-dev.txt         # + pytest & ruff
@@ -285,10 +293,14 @@ passing silently.
 
 ## Documentation
 
-The [project guide](docs/NEXORA_PROJECT_GUIDE.md) is a complete technical
-handbook: architecture, data flow, module-by-module reference, Neo4j and Ollama
-guides, configuration reference, error taxonomy, maintenance recipes, security
-and deployment notes, and a full list of known limitations and future ideas.
+- **[Project guide](docs/NEXORA_PROJECT_GUIDE.md)** — complete technical
+  handbook: architecture, data flow, module-by-module reference, Neo4j and
+  Ollama guides, configuration reference, error taxonomy, maintenance recipes,
+  security and deployment notes, and a full list of known limitations and
+  future ideas.
+- **[Deployment guide](docs/DEPLOYMENT.md)** — step-by-step instructions to
+  host Nexora as a public, always-on live demo on a VPS (Docker Compose +
+  Caddy HTTPS proxy with Basic Auth), with no code changes.
 
 ## Roadmap
 

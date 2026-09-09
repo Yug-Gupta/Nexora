@@ -17,9 +17,10 @@ env/
 .coverage
 htmlcov/
 
-# Tests, docs and CI are not part of the image
+# Tests, docs, CI and deployment files are not part of the image
 tests/
 docs/
+deploy/
 .github/
 
 # Editor / OS
