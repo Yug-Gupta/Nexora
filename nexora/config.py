@@ -22,8 +22,8 @@ _ENV_DEFAULTS = {
     "neo4j_uri": "bolt://127.0.0.1:7687",
     "neo4j_user": "neo4j",
     "neo4j_database": None,
-    "ollama_base_url": "http://127.0.0.1:11434",
-    "model_name": "llama3.2",
+    "gemini_api_key": "",
+    "gemini_model": "gemini-2.5-flash",
     "retrieval_depth": 2,
     "entry_limit": 8,
     "context_cap": 18,
@@ -36,8 +36,8 @@ _ENV_MAP = {
     "neo4j_user": "NEO4J_USER",
     "neo4j_password": "NEO4J_PASSWORD",
     "neo4j_database": "NEO4J_DATABASE",
-    "ollama_base_url": "OLLAMA_BASE_URL",
-    "model_name": "OLLAMA_MODEL",
+    "gemini_api_key": "GEMINI_API_KEY",
+    "gemini_model": "GEMINI_MODEL",
     "retrieval_depth": "NEXORA_RETRIEVAL_DEPTH",
     "entry_limit": "NEXORA_ENTRY_LIMIT",
     "context_cap": "NEXORA_CONTEXT_LIMIT",
@@ -94,17 +94,19 @@ def _as_float(
 class Settings:
     """Immutable snapshot of every tunable used by the application.
 
-    Infrastructure defaults point at local development services (Neo4j on
-    ``bolt://127.0.0.1:7687`` and Ollama on ``http://127.0.0.1:11434``), so a
-    fresh checkout works with zero configuration once those services run.
+    Neo4j defaults point at local development (``bolt://127.0.0.1:7687``), but
+    every Neo4j value is configurable so the app can connect to a managed
+    instance such as Neo4j AuraDB. Inference is provided by the Google Gemini
+    API; ``gemini_api_key`` is empty by default and must be supplied through the
+    environment, a ``.env`` file or Streamlit secrets.
     """
 
     neo4j_uri: str = "bolt://127.0.0.1:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""
     neo4j_database: str | None = None
-    ollama_base_url: str = "http://127.0.0.1:11434"
-    model_name: str = "llama3.2"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
     retrieval_depth: int = 2
     entry_limit: int = 8
     context_cap: int = 18
@@ -122,8 +124,8 @@ class Settings:
             self.neo4j_user,
             self.neo4j_password,
             self.neo4j_database,
-            self.ollama_base_url,
-            self.model_name,
+            self.gemini_api_key,
+            self.gemini_model,
             self.retrieval_depth,
             self.entry_limit,
             self.context_cap,
@@ -147,10 +149,8 @@ class Settings:
             neo4j_user=env.get("NEO4J_USER", _ENV_DEFAULTS["neo4j_user"]),
             neo4j_password=env.get("NEO4J_PASSWORD", ""),
             neo4j_database=env.get("NEO4J_DATABASE") or None,
-            ollama_base_url=env.get(
-                "OLLAMA_BASE_URL", _ENV_DEFAULTS["ollama_base_url"]
-            ),
-            model_name=env.get("OLLAMA_MODEL", _ENV_DEFAULTS["model_name"]),
+            gemini_api_key=env.get("GEMINI_API_KEY", ""),
+            gemini_model=env.get("GEMINI_MODEL", _ENV_DEFAULTS["gemini_model"]),
             retrieval_depth=_as_int(
                 env.get("NEXORA_RETRIEVAL_DEPTH"),
                 _ENV_DEFAULTS["retrieval_depth"],

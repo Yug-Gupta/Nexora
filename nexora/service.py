@@ -2,7 +2,7 @@
 
 :class:`KnowledgeAssistant` owns the graph connector and the model gateway and
 wires them to the extraction / retrieval / answering pipeline.  The UI never
-manipulates Neo4j or Ollama directly, and every failure surfaces as an
+manipulates Neo4j or Gemini directly, and every failure surfaces as an
 :class:`~nexora.errors.AppError` subclass with a UI-safe message.
 """
 
@@ -43,13 +43,13 @@ class KnowledgeAssistant:
         )
         self._store = KnowledgeBase(self._connector)
         self._gateway = InferenceGateway(
-            base_url=settings.ollama_base_url,
-            default_model=settings.model_name,
+            api_key=settings.gemini_api_key,
+            default_model=settings.gemini_model,
             timeout_seconds=settings.llm_timeout,
         )
         logger.info(
             "KnowledgeAssistant ready (model=%s, depth=%d)",
-            settings.model_name,
+            settings.gemini_model,
             settings.retrieval_depth,
         )
 
@@ -71,7 +71,7 @@ class KnowledgeAssistant:
             document_text=content,
             source_label=label,
             gateway=self._gateway,
-            model_name=self.settings.model_name,
+            model_name=self.settings.gemini_model,
         )
         self._store.register_document(label=label, text=content)
         for entity in entities:
@@ -104,7 +104,7 @@ class KnowledgeAssistant:
             question=question,
             pieces=pieces,
             gateway=self._gateway,
-            model_name=self.settings.model_name,
+            model_name=self.settings.gemini_model,
         )
         audit.append(
             f"Answer relies on {len(references)} verified source reference(s)."
@@ -118,7 +118,7 @@ class KnowledgeAssistant:
         return self._store.overview()
 
     def health_report(self) -> tuple[HealthProbe, ...]:
-        """Probe Neo4j, Ollama and the configured model without throwing."""
+        """Probe Neo4j, the Gemini API and the configured model without throwing."""
         probes: list[HealthProbe] = []
 
         try:
@@ -144,7 +144,7 @@ class KnowledgeAssistant:
             installed_models = self._gateway.available_models()
             probes.append(
                 HealthProbe(
-                    component="Model service",
+                    component="Gemini API",
                     available=True,
                     message=f"{len(installed_models)} model(s) available.",
                     extra=tuple(installed_models),
@@ -153,7 +153,7 @@ class KnowledgeAssistant:
         except Exception as exc:
             probes.append(
                 HealthProbe(
-                    component="Model service",
+                    component="Gemini API",
                     available=False,
                     message=str(exc),
                 )
@@ -161,7 +161,7 @@ class KnowledgeAssistant:
 
         if installed_models is not None:
             model_ready = self._gateway.model_is_installed(
-                model_name=self.settings.model_name, installed=installed_models
+                model_name=self.settings.gemini_model, installed=installed_models
             )
             probes.append(
                 HealthProbe(
@@ -170,7 +170,7 @@ class KnowledgeAssistant:
                     message=(
                         "Ready."
                         if model_ready
-                        else f"'{self.settings.model_name}' not installed."
+                        else f"'{self.settings.gemini_model}' not available."
                     ),
                 )
             )
@@ -179,7 +179,7 @@ class KnowledgeAssistant:
                 HealthProbe(
                     component="Configured model",
                     available=False,
-                    message="Unknown until the model service responds.",
+                    message="Unknown until the Gemini API responds.",
                 )
             )
         return tuple(probes)

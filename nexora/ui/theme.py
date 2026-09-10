@@ -139,8 +139,8 @@ def render_hero() -> None:
             Turn your documents into a queryable knowledge graph. Nexora
             extracts typed entities and relationships into Neo4j, retrieves
             evidence by walking the graph (multi-hop), and answers natural
-            language questions with a local LLM - every claim traceable to the
-            source it came from.
+            language questions with Google Gemini - every claim traceable to
+            the source it came from.
           </p>
           <div class="nex-pipeline">
             <span class="nex-stage">Document</span><span class="nex-arrow">→</span>

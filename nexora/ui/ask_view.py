@@ -95,7 +95,7 @@ def render() -> None:
     st.caption(
         "Nexora turns your question into search terms, finds matching entry "
         "points in the graph, expands several hops through related entities "
-        "and asks the local model to answer strictly from that evidence."
+        "and asks Google Gemini to answer strictly from that evidence."
     )
 
     if "question_text" not in st.session_state:

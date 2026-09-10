@@ -12,7 +12,7 @@ import logging
 import streamlit as st
 
 from nexora.config import Settings, configure_logging
-from nexora.ui import ask_view, ingest_view, sidebar, status_view, theme
+from nexora.ui import ask_view, ingest_view, sidebar, state, status_view, theme
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,9 @@ _NAV = [
 
 
 def main() -> None:
+    # Streamlit Community Cloud supplies configuration through st.secrets;
+    # bridge it into the environment before settings/logging are read.
+    state.hydrate_environment_from_secrets()
     configure_logging(Settings.from_environment().log_level)
     st.set_page_config(
         page_title="Nexora - Knowledge Graph Intelligence Engine",

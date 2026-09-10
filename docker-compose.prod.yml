@@ -6,13 +6,14 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
 # Secrets/domain are read from your root .env (already git-ignored):
+#   GEMINI_API_KEY=...        (also consumed by the studio service)
 #   APP_DOMAIN=https://demo.example.com
 #   AUTH_USER=admin
 #   AUTH_HASH=<bcrypt hash, see docs/DEPLOYMENT.md>
 #
 # The proxy talks to the app over the internal compose network, so the app
 # itself does not need to be reachable from the internet. Close ports
-# 7474 / 7687 / 8501 / 11434 in your firewall — only 22 / 80 / 443 should be
+# 7474 / 7687 / 8501 in your firewall — only 22 / 80 / 443 should be
 # open (see docs/DEPLOYMENT.md).
 
 services:

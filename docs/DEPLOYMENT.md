@@ -1,52 +1,80 @@
 # Deploying a Public Nexora Demo
 
-This guide turns your local Nexora into a **public, always-on demo** you can
-link from a resume or portfolio. It reuses the exact stack you already run
-locally — **no application code changes** — and adds an HTTPS reverse proxy
-with HTTP Basic Auth in front of it.
+Nexora is easy to host because inference runs through the **Google Gemini API**
+rather than a local model server. You have two good options:
 
-```
-Internet ──► Caddy (443, Basic Auth) ──► Streamlit (studio:8501) ──► Neo4j + Ollama
-```
+1. **Streamlit Community Cloud** — free, zero server management (recommended).
+2. **Self-hosted VPS** — full control, Docker Compose + an HTTPS reverse proxy.
 
-> Short version: rent an 8 GB VPS, install Docker, clone the repo, add three
-> lines to `.env`, and run two `docker compose` commands.
+Either way you need a **Gemini API key** and a **Neo4j** database (local Docker
+or a free **Neo4j AuraDB** instance).
+
+> Never commit your API key. `.env` and `.streamlit/secrets.toml` are already
+> git-ignored; keep it that way. If a key leaks, revoke it in Google AI Studio.
 
 ---
 
-## 1. Choose a server
+## Option 1 — Streamlit Community Cloud (free)
 
-Any small Linux VPS works. Recommended minimum: **2 vCPU, 8 GB RAM, 40 GB SSD**,
-Ubuntu 22.04/24.04.
+1. Push this repository to GitHub.
+2. Sign in at <https://share.streamlit.io> and choose **New app**.
+3. Select the repository, branch `main`, and main file `app.py`.
+4. Under **Advanced settings → Secrets**, paste (with real values):
 
-- 8 GB gives Neo4j (~1–2 GB) and a small Ollama model such as `llama3.2`
-  (~2 GB) comfortable headroom.
-- Providers: Hetzner, DigitalOcean, Vultr, Railway, Render, Fly.io, etc.
-- Optional but recommended: create a DNS `A` record such as
-  `demo.yourdomain.com → <server IP>` before starting (needed for HTTPS).
+   ```toml
+   GEMINI_API_KEY = "your_gemini_api_key_here"
+   GEMINI_MODEL = "gemini-2.5-flash"
 
-## 2. Connect and install Docker
+   NEO4J_URI = "neo4j+s://<your-instance-id>.databases.neo4j.io"
+   NEO4J_USER = "neo4j"
+   NEO4J_PASSWORD = "<your-auradb-password>"
+   ```
+
+   Create a **Neo4j AuraDB Free** instance if you do not already have a Neo4j
+   database, and copy its connection URI and password.
+5. Deploy and open the URL, then run **System status → Run diagnostics**.
+
+Nexora bridges these Streamlit secrets into the environment automatically
+(`nexora/ui/state.py`); no code changes are required.
+
+### Optional — Neo4j AuraDB notes
+
+- Use the `neo4j+s://…` URI (TLS) exactly as AuraDB shows it.
+- AuraDB Free is fine for a demo; wipe the graph from the *System status* tab
+  when it gets stale.
+
+---
+
+## Option 2 — Self-hosted VPS with Docker Compose
+
+This runs **Neo4j + the Streamlit app** together and puts an HTTPS reverse proxy
+(Caddy) with HTTP Basic Auth in front. Inference still comes from Gemini, so no
+model container is needed.
+
+```
+Internet ──► Caddy (443, Basic Auth) ──► Streamlit (studio:8501) ──► Neo4j
+                                                       │
+                                                       └──► Google Gemini API
+```
+
+### 2.1 Choose a server
+
+Any small Linux VPS works: **1–2 vCPU, 2–4 GB RAM, 20 GB disk**, Ubuntu
+22.04/24.04. Because the model runs at Google, a tiny box is enough.
+
+Providers: Hetzner, DigitalOcean, Vultr, Railway, Render, Fly.io, etc. If you
+want HTTPS, create a DNS `A` record such as `demo.yourdomain.com → <server IP>`.
+
+### 2.2 Connect and install Docker
 
 ```bash
 ssh root@<server-ip>
-```
-
-Install Docker Engine + Compose plugin (official convenience script, or follow
-the [Docker docs](https://docs.docker.com/engine/install/)):
-
-```bash
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER && newgrp docker
+docker --version && docker compose version
 ```
 
-Verify:
-
-```bash
-docker --version
-docker compose version
-```
-
-## 3. Get the code and configure `.env`
+### 2.3 Get the code and configure `.env`
 
 ```bash
 git clone https://github.com/Yug-Gupta/Nexora.git
@@ -54,57 +82,51 @@ cd Nexora
 cp .env.example .env
 ```
 
-Generate a Basic Auth password hash and add the three lines below to `.env`
-(the file is already git-ignored, so secrets never get committed):
+Edit `.env` and set at least:
+
+```dotenv
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-flash
+NEO4J_PASSWORD=choose-a-strong-password
+```
+
+> **Note:** if `.env` also contains `NEO4J_URI=bolt://127.0.0.1:7687` (for
+> local `streamlit run`), override it for Compose so the app reaches the
+> container:
+> `NEO4J_URI=bolt://graphdb:7687 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
+
+Generate a Basic Auth password hash and add the three proxy lines:
 
 ```bash
 docker run --rm caddy:2 caddy hash-password --plaintext 'choose-a-strong-password'
-# -> copies a bcrypt hash like $2a$14$wA...  (write it down)
+# copy the bcrypt hash it prints
 ```
 
-Append to `.env`:
-
 ```dotenv
-# --- Public demo (Caddy) -----------------------------------------------------
 APP_DOMAIN=https://demo.yourdomain.com
 AUTH_USER=admin
 AUTH_HASH=$2a$14$wA...
 ```
 
-> No domain yet? Point `APP_DOMAIN` at the bare server IP with plain HTTP:
-> `APP_DOMAIN=http://203.0.113.10`. Skip step 5's DNS requirement in that case.
+> No domain? Use `APP_DOMAIN=http://<server-ip>` for plain HTTP (no TLS).
 
-## 4. Start the stack
+### 2.4 Start the stack
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
-Wait for everything to become healthy, then install the model used by the app:
-
-```bash
-docker exec nexora-ollama ollama pull llama3.2
-```
-
-> Prefer a faster/smaller model? Edit `OLLAMA_MODEL` in the `studio` service of
-> `docker-compose.yml` (e.g. `qwen2.5:3b`) and pull that tag instead. The
-> default `llama3.2` is ~2 GB and runs well on 8 GB.
-
-Inspect progress:
+There is no model to pull. Check progress:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
 docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f studio
 ```
 
-## 5. Open the firewall
+### 2.5 Open the firewall
 
-The base compose file publishes several ports for **local development**
-(Neo4j `7474/7687`, Ollama `11434`, Streamlit `8501`). For a public demo only
-Caddy's `80/443` should be reachable — block the rest so the database and model
-server are never exposed.
-
-With UFW:
+The base compose file publishes Neo4j (`7474/7687`) and Streamlit (`8501`) for
+local development. For a public demo only Caddy's `80/443` should be reachable:
 
 ```bash
 sudo ufw allow 22/tcp
@@ -114,54 +136,44 @@ sudo ufw enable
 sudo ufw status
 ```
 
-If your provider has a cloud firewall, apply the same rules there instead
-(allow only 22, 80, 443).
+(If your provider has a cloud firewall, apply the same rules there.)
 
-## 6. Verify the demo
+### 2.6 Verify the demo
 
 1. Open `https://demo.yourdomain.com` (or `http://<server-ip>`).
 2. Log in with the `AUTH_USER` / password you chose.
-3. On **System status**, run *Diagnostics* — Neo4j, Ollama and the model should
-   all report healthy.
+3. Run **System status → Run diagnostics** — Neo4j and the Gemini API should be
+   healthy.
 4. Ingest the three built-in sample documents, then ask a cross-document
    question such as *"Which investors back Aster Systems and what else do they
-   hold?"* to prove multi-hop retrieval works.
+   hold?"*.
 
-## 7. Keeping it running and updating
+### 2.7 Updating and teardown
 
 ```bash
-# Inspect logs / restart a service
-docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f --tail=200
-
 # Update to the latest code and rebuild
 git pull
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
-# Full teardown (keeps volumes)
+# Stop (keeps volumes)
 docker compose -f docker-compose.yml -f docker-compose.prod.yml down
 
-# Teardown INCLUDING all demo data (Neo4j + Ollama + Caddy volumes)
+# Stop and delete all demo data (Neo4j + Caddy volumes)
 docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v
 ```
 
-Neo4j and Ollama data persist in named volumes (`neo4j_data`, `ollama_data`).
-Back them up by snapshotting `/var/lib/docker/volumes/` or use your provider's
-volume/disk snapshots.
+Neo4j data persists in the `neo4j_data` named volume.
 
-## 8. Troubleshooting
+---
+
+## Troubleshooting
 
 | Symptom | Fix |
 | --- | --- |
-| Caddy can't get a certificate | The DNS `A` record must point at this server before start; then `docker compose ... restart proxy`. |
-| Model answers are slow | First request loads the model into RAM. Pre-warm by sending one ingest/answer, then retry. |
-| App reachable, but blank page | Check `docker compose ... logs studio`; ensure the proxy is healthy. |
-| Basic Auth not prompting | The browser may have cached an old session — open an incognito window. |
-| Out of memory / Neo4j restart loops | Use a 4 GB-model-free setup: pull a smaller model, or raise the VPS to 8 GB. |
-
-## 9. Making the demo public without a password (optional)
-
-If you prefer interviewers to click straight in, remove the `basic_auth` block
-from `deploy/Caddyfile` and restart the proxy. **Warning:** anyone with the URL
-could then also erase the graph from the *System status* tab, so either clear
-the graph and re-ingest the samples beforehand, or keep Basic Auth and print
-the credentials next to the demo link on your resume.
+| "The Gemini API key is not configured" | Set `GEMINI_API_KEY` in `.env` (or Streamlit secrets) and restart. |
+| "The Gemini API key was rejected" | The key is wrong/disabled — create a new one in Google AI Studio. |
+| "rate limit was reached" | Free-tier quota hit; wait, or switch `GEMINI_MODEL` to a lighter model. |
+| Caddy can't get a certificate | The DNS `A` record must point at this server before start; restart the `proxy` service. |
+| Blank page behind the proxy | Check `docker compose … logs studio`; Streamlit must be healthy on `8501`. |
+| Basic Auth not prompting | Browser cached an old session — use an incognito window. |
+| Neo4j connection failure | Verify `NEO4J_URI`/credentials; AuraDB URIs start with `neo4j+s://`. |

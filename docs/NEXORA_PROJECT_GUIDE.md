@@ -20,9 +20,9 @@ only open one file to understand this project, open this one.
 | Product tagline | Knowledge Graph Intelligence Engine |
 | Python package | `nexora` |
 | App entry point | `app.py` (Streamlit) |
-| Purpose | GraphRAG over your own documents with a local LLM |
+| Purpose | GraphRAG over your own documents with the Google Gemini API |
 | Main capabilities | Document ingestion, entity/relation extraction, Neo4j knowledge graph, multi-hop retrieval, grounded answer generation, provenance/citations, live diagnostics |
-| Technology stack | Python 3.10+, Streamlit, Neo4j (official driver), Ollama (official client), Docker Compose (optional), pytest, ruff |
+| Technology stack | Python 3.10+, Streamlit, Neo4j (official driver), Google Gemini (`google-genai`), Docker Compose (optional), pytest, ruff |
 
 The package identity constants live in `nexora/__init__.py`:
 
@@ -40,7 +40,7 @@ In plain language:
 
 1. You paste a piece of text (a paragraph about a company, an event, a product
    ecosystem…) and give it a reference label.
-2. Nexora asks a **local** model (via Ollama) to read the text and return a
+2. Nexora asks the **Google Gemini API** to read the text and return a
    structured JSON description of the *entities* it mentions and the
    *relationships* between them.
 3. Nexora validates that JSON (LLMs are imperfect), then writes it into a
@@ -51,14 +51,15 @@ In plain language:
    keywords, finds matching *seed* entities, and **walks the graph** a few
    relationship hops to collect connected evidence (this is what lets it join
    facts that live in different documents).
-5. The collected evidence is handed to the same local model as numbered
-   entries with an instruction to ground every claim in one or more entries and
-   cite them inline as `[1]`, `[2]`.
+5. The collected evidence is handed to Gemini as numbered entries with an
+   instruction to ground every claim in one or more entries and cite them
+   inline as `[1]`, `[2]`.
 6. Nexora parses those citations, verifies each one against the real evidence,
    and renders the answer with expandable source cards showing the document,
    an excerpt and the graph route used to reach each piece of evidence.
 
-Nothing (documents, graph, model) leaves your machine.
+The knowledge graph lives in your Neo4j database; document text and questions
+are sent to the Google Gemini API for extraction and answering.
 
 ---
 
@@ -80,7 +81,7 @@ never runs Cypher or builds prompts. They meet at one facade class:
 │         statements.py  all Cypher + graph schema          │
 │         repository.py  KnowledgeBase (read/write)         │
 │                                                           │
-│  llm/   gateway.py     InferenceGateway (Ollama client)   │
+│  llm/   gateway.py     InferenceGateway (Gemini client)   │
 │         prompts.py     extraction + answering templates    │
 │                                                           │
 │  pipeline/ extraction.py  text -> validated entities/rels │
@@ -100,13 +101,15 @@ never runs Cypher or builds prompts. They meet at one facade class:
 Design rules enforced in this codebase:
 
 - Only `nexora/db/connector.py` touches `neo4j.GraphDatabase.driver`.
-- Only `nexora/llm/gateway.py` touches the `ollama` client.
-- Only `nexora/ui/**` imports `streamlit`.
+- Only `nexora/llm/gateway.py` imports `google-genai`.
+- Only `nexora/ui/**` imports `streamlit`; `nexora/ui/state.py` bridges
+  Streamlit secrets into the environment so the engine stays Streamlit-free.
 - Every Cypher query lives in `nexora/db/statements.py`.
 - Every prompt lives in `nexora/llm/prompts.py`.
-- No module reaches into `os.environ` except `nexora/config.py`.
+- No engine module reaches into `os.environ` except `nexora/config.py`.
 - All user-facing errors derive from `nexora.errors.AppError` and carry a
   UI-safe `message` plus a technical `detail` intended for logs.
+- The Gemini API key is never logged, displayed or embedded in error details.
 
 ---
 
@@ -118,7 +121,7 @@ Design rules enforced in this codebase:
    ▼ 1. service.KnowledgeAssistant.ingest_document()
  extract_graph_elements()
    │  builds extraction prompt (prompts.build_extraction_prompt)
-   │  gateway.complete(..., expect_json=True)   [Ollama]
+   │  gateway.complete(..., expect_json=True)   [Gemini]
    │  JSON payload → validate & normalise        (extraction.py)
    ▼ entities: list[Entity], relations: list[Relation]
  store.register_document(label, text)            (Document node)
@@ -138,7 +141,7 @@ Design rules enforced in this codebase:
    ▼ context: list[ContextPiece]   (+ audit lines)
  synthesise_answer()
    │  build_answer_prompt(question, pieces)
-   │  gateway.complete(...)                            [Ollama]
+   │  gateway.complete(...)                            [Gemini]
    │  parse & verify inline citations  → references
    ▼
  QueryAnswer(text, references, audit) → UI answer card + source cards
@@ -191,7 +194,8 @@ verified `ProvenanceRecord`s on every `QueryAnswer`.
 │   ├── test_retrieval.py
 │   ├── test_answering.py
 │   ├── test_llm.py
-│   └── test_service.py
+│   ├── test_service.py
+│   └── test_ui_state.py
 ├── docs/
 │   ├── NEXORA_PROJECT_GUIDE.md  # this document
 │   └── DEPLOYMENT.md            # hosting a public live demo on a VPS
@@ -288,9 +292,9 @@ verified `ProvenanceRecord`s on every `QueryAnswer`.
 - **Dependencies:** db + llm + pipeline layers.
 - **Notes:** enforces `_MIN_DOCUMENT_CHARS = 20`; registers the document before
   saving entities so provenance exists even for relation-less documents.
-  `health_report()` fetches the installed-model list exactly once and reuses it
-  for both the *Model service* and the *Configured model* probes, so a health
-  check never issues two redundant `ollama list` calls.
+  `health_report()` fetches the available-model list exactly once and reuses it
+  for both the *Gemini API* and the *Configured model* probes, so a health
+  check never issues two redundant `models.list` calls.
 
 #### `nexora/db/__init__.py`
 Docstring-only marker.
@@ -348,21 +352,26 @@ Docstring-only marker.
 Docstring-only marker.
 
 #### `nexora/llm/gateway.py`
-- **Purpose:** sole wrapper around the Ollama client.
-- **Class:** `InferenceGateway(base_url, default_model, timeout_seconds=300)`.
-- **Methods:** `available_models()`,
-  `model_is_installed(model_name=None, *, installed=None)` (tolerates the
-  `:latest` suffix; an already-fetched model list may be passed in via
-  `installed` to avoid a second server round-trip), `complete(prompt,
+- **Purpose:** sole wrapper around the Google Gemini API (`google-genai`).
+- **Class:** `InferenceGateway(api_key, default_model, timeout_seconds=300,
+  *, client=None)`. The optional `client` is a test seam; in production the
+  real `genai.Client` is built lazily only when an API key is present.
+- **Methods:** `is_configured()`, `available_models()` (calls
+  `client.models.list()` and normalises `models/<name>` → `<name>`),
+  `model_is_installed(model_name=None, *, installed=None)` (an already-fetched
+  list may be passed in to avoid a second API round-trip), `complete(prompt,
   model_name=None, *, expect_json=False)`.
-- **Compatibility:** helper functions `_extract_chat_content` and
-  `_extract_model_tags` accept **both** the typed pydantic responses returned
-  by `ollama>=0.2` (`ChatResponse`, `ListResponse`) **and** the plain dicts
-  returned by older SDKs. This was a genuine bug in the pre-Nexora codebase
-  with current SDK versions.
-- **Timeout:** forwarded to the underlying httpx client when the SDK supports
-  it (falls back gracefully otherwise).
-- **Errors:** connection/model/timeout problems → `InferenceError`.
+- **Extraction reliability:** `expect_json=True` sets Gemini's
+  `response_mime_type="application/json"`, keeping entity/relation extraction
+  as valid JSON.
+- **Response parsing:** helper functions `_extract_response_text`,
+  `_extract_model_names` and `_model_short_name` accept both typed SDK objects
+  and plain dicts, so mocks and older SDK builds are supported.
+- **Timeout:** forwarded as `HttpOptions(timeout=<ms>)`; falls back gracefully
+  on SDK builds that do not accept it.
+- **Errors:** invalid key, rate limits, server errors, network failures,
+  timeouts and empty replies are translated via `translate_inference_failure`
+  into `InferenceError`, without ever including the API key.
 
 #### `nexora/llm/prompts.py`
 - **Purpose:** prompt templates, isolated from logic.
@@ -418,10 +427,12 @@ Docstring-only marker.
   `render_answer_markup`). All model/user text is HTML-escaped before
   rendering.
 - `state.py`: `current_settings`, `update_settings`, `reset_settings`,
-  `get_assistant` (cached by settings signature, closes the previous
-  assistant on change), overview/probes caching, and `present_error`.
-- `sidebar.py`: live connection form (Neo4j, Ollama, retrieval behaviour),
-  save/reconnect, reset-to-defaults, service summary, about.
+  `get_assistant` (cached by settings signature, closes the previous assistant
+  on change), overview/probes caching, `present_error`, and
+  `hydrate_environment_from_secrets` — the bridge that copies whitelisted
+  `st.secrets` values into the environment for Streamlit Community Cloud.
+- `sidebar.py`: live connection form (Neo4j, Gemini API key + model, retrieval
+  behaviour), save/reconnect, reset-to-defaults, service summary, about.
 - `ingest_view.py`: sample picker, text editor, reference label, “Analyse and
   index” action, ingestion report (metrics + tables).
 - `ask_view.py`: suggested questions, question editor, grounded-answer card,
@@ -434,20 +445,21 @@ Docstring-only marker.
 ## 6. Configuration Guide
 
 All values below are read by `nexora/config.py`. Real environment variables
-win over `.env`. Copy `.env.example` → `.env` and edit.
+win over `.env`. Copy `.env.example` → `.env` and edit. On Streamlit Community
+Cloud the same keys can be provided through `st.secrets` (see §24).
 
 | Variable | Purpose | Required? | Example | Used in |
 | --- | --- | --- | --- | --- |
-| `NEO4J_URI` | Neo4j Bolt URI | No (default) | `bolt://127.0.0.1:7687` | `connector.py` |
+| `GEMINI_API_KEY` | Google Gemini API key (**secret**) | **Yes** | `AIza…` (never commit) | `gateway.py` |
+| `GEMINI_MODEL` | Gemini model for extraction + answering | No (default) | `gemini-2.5-flash` | `service.py`, `gateway.py` |
+| `NEO4J_URI` | Neo4j Bolt URI (local or `neo4j+s://` AuraDB) | No (default) | `bolt://127.0.0.1:7687` | `connector.py` |
 | `NEO4J_USER` | Neo4j user name | No (default) | `neo4j` | `connector.py` |
 | `NEO4J_PASSWORD` | Neo4j password | **Yes** for a real DB | `change_me` | `connector.py` |
 | `NEO4J_DATABASE` | Neo4j database; server default when empty | No | `neo4j` | `connector.py` |
-| `OLLAMA_BASE_URL` | Ollama HTTP endpoint | No (default) | `http://127.0.0.1:11434` | `gateway.py` |
-| `OLLAMA_MODEL` | Model tag for extraction + answering | No (default) | `llama3.2` | `service.py`, `gateway.py` |
 | `NEXORA_RETRIEVAL_DEPTH` | Hops walked per seed (clamped 1–6) | No (default `2`) | `2` | `retrieval.py` |
 | `NEXORA_ENTRY_LIMIT` | Max seed candidates returned (clamped 1–30) | No (default `8`) | `8` | `retrieval.py` |
 | `NEXORA_CONTEXT_LIMIT` | Max evidence entries per prompt (clamped 4–60) | No (default `18`) | `18` | `retrieval.py` |
-| `NEXORA_LLM_TIMEOUT` | Seconds per Ollama request (clamped 5–3600) | No (default `300`) | `300` | `gateway.py` |
+| `NEXORA_LLM_TIMEOUT` | Seconds per Gemini request (clamped 5–3600) | No (default `300`) | `300` | `gateway.py` |
 | `NEXORA_LOG_LEVEL` | Log level for the `nexora` logger tree | No (default `INFO`) | `DEBUG` | `config.configure_logging` |
 
 The sidebar of the running app can override the connection/model/retrieval
@@ -472,8 +484,23 @@ docker run -d --name nexora-neo4j \
 - Browser UI: `http://localhost:7474`
 - Bolt (driver): `bolt://localhost:7687`
 
-Or use the compose file (`docker compose up --build`) which starts Neo4j,
-Ollama and the app together.
+Or use the compose file (`docker compose up --build`) which starts Neo4j and
+the app together (inference runs on the Gemini API, so there is no model
+container).
+
+### Neo4j AuraDB
+
+To use a managed database instead of local Docker, set the values AuraDB
+provides:
+
+```
+NEO4J_URI=neo4j+s://<your-instance-id>.databases.neo4j.io
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=<your-auradb-password>
+```
+
+The connector opens sessions against the configured URI/database, so no code
+change is required.
 
 ### Credentials configuration
 
@@ -588,38 +615,37 @@ MERGE works without them; they make it faster and safer.
 
 ---
 
-## 8. Ollama Guide
+## 8. Gemini Guide
 
-### Installation / start / model
+### Get an API key and choose a model
 
-1. Install Ollama (see ollama.com) and start it (it usually runs as a
-   background service on port `11434`).
-2. Pull a model:
+1. Create an API key in **Google AI Studio**. Treat it as a secret.
+2. Store it as `GEMINI_API_KEY` in `.env` (local) or in Streamlit secrets
+   (Community Cloud). Never commit it, log it or paste it into code.
+3. Choose a model with `GEMINI_MODEL` — the default is `gemini-2.5-flash`;
+   `gemini-2.0-flash` also works.
 
-   ```bash
-   ollama pull llama3.2
-   ```
+### How Nexora talks to Gemini
 
-3. Confirm with `ollama list`.
-
-### How Nexora talks to Ollama
-
-- `nexora/llm/gateway.py` creates one `ollama.Client(host=OLLAMA_BASE_URL,
-  timeout=NEXORA_LLM_TIMEOUT)` per `KnowledgeAssistant`.
-- Extraction calls `complete(..., expect_json=True)` which asks the SDK to
-  constrain output to JSON (`format="json"`); on SDKs too old to support it,
-  the gateway retries without the option.
+- `nexora/llm/gateway.py` builds one `genai.Client(api_key=…,
+  http_options=HttpOptions(timeout=<ms>))` per `KnowledgeAssistant`, and only
+  when a key is present.
+- Extraction calls `complete(..., expect_json=True)`, which sets
+  `response_mime_type="application/json"` so the response is valid JSON.
 - Answering calls `complete(..., expect_json=False)`.
+- `available_models()` calls `client.models.list()` for health checks; the key
+  is never returned or displayed.
 
-### Troubleshooting (Ollama)
+### Troubleshooting (Gemini)
 
 | Symptom | Fix |
 | --- | --- |
-| “Could not reach the Ollama service” | Start Ollama; check `OLLAMA_BASE_URL`; try `curl http://127.0.0.1:11434`. |
-| “The requested model is not installed” | `ollama pull <tag>`; verify `OLLAMA_MODEL`. |
-| “took too long to answer” | Raise `NEXORA_LLM_TIMEOUT`; smaller models are faster. |
-| Extraction returns unusable JSON repeatedly | Test the model manually: `ollama run llama3.2 "Return JSON: ..."`. Some tiny models are not reliable extractors; use a bigger one. |
-| Model calls hang forever | First model load can take a while; raise the timeout. |
+| “The Gemini API key is not configured” | Set `GEMINI_API_KEY` in `.env`/secrets and restart. |
+| “The Gemini API key was rejected” | The key is invalid or disabled — create a new one in AI Studio. |
+| “rate limit was reached” | Free-tier quota hit; wait a moment or switch `GEMINI_MODEL`. |
+| “took too long to answer” | Raise `NEXORA_LLM_TIMEOUT`; try a lighter model. |
+| “model … not available” | Check the exact model name in `GEMINI_MODEL`. |
+| Extraction returns unusable JSON repeatedly | Try a stronger model; the gateway already requests JSON mode. |
 
 ---
 
@@ -652,17 +678,18 @@ Copy-Item .env.example .env
 # 5. Neo4j (Docker)
 docker run -d --name nexora-neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:latest
 
-# 6. Ollama + model
-ollama pull llama3.2
+# 6. Gemini API key
+#    Set GEMINI_API_KEY (and optionally GEMINI_MODEL) in .env, or in
+#    Streamlit secrets when deploying to Community Cloud.
 ```
 
 ---
 
 ## 10. Startup Guide (step-by-step)
 
-1. Ensure Neo4j is reachable: `NEO4J_URI`, credentials in `.env`.
-2. Ensure Ollama is running and `OLLAMA_MODEL` is installed
-   (`ollama list`).
+1. Ensure Neo4j is reachable: `NEO4J_URI`, credentials in `.env` (or AuraDB).
+2. Ensure `GEMINI_API_KEY` is set (and `GEMINI_MODEL` is a model your key can
+   use).
 3. From the repository root, with the venv active:
 
    ```bash
@@ -671,7 +698,7 @@ ollama pull llama3.2
 
 4. Open `http://localhost:8501`.
 5. Check connectivity first: **System status → Run diagnostics**. You should
-   see Neo4j Available, Ollama Available, and your model Ready.
+   see Neo4j Available, Gemini API Available, and your model Ready.
 6. **Ingest knowledge** → load an example or paste text → *Analyse and index*.
 7. **Ask a question** → pick/type a question → *Get grounded answer*.
 
@@ -679,7 +706,8 @@ ollama pull llama3.2
 
 ## 11. Daily Development Workflow
 
-- **Start services:** Neo4j (Docker container or Compose), Ollama.
+- **Start services:** Neo4j (Docker container or Compose). No model service —
+  inference is the Gemini API.
 - **Run Nexora:** `streamlit run app.py` (Streamlit auto-reloads on save).
 - **Run tests:** `python -m pytest` (or `python -m pytest -q`).
 - **Lint / format:** `ruff check .` and `ruff format .`
@@ -789,7 +817,7 @@ facts across documents instead of doing literal text matching.
 | --- | --- | --- |
 | `UserInputError` | empty/too-short document, missing label, empty question | actionable guidance |
 | `StorageError` | Neo4j offline / bad credentials / query failure | “Could not reach…”, “rejected the credentials” |
-| `InferenceError` | Ollama offline / model missing / timeout / empty reply | “Could not reach…”, “not installed”, “took too long” |
+| `InferenceError` | invalid/missing Gemini key, rate limit, server error, timeout, empty reply | “key was rejected”, “rate limit”, “took too long” |
 | `SourceError` | model JSON unusable, extraction empty | “could not analyse…”, “No entities…” |
 | `ContextError` | no terms/seeds/context for a question | “Nothing matched…”, “No searchable terms…” |
 
@@ -804,16 +832,18 @@ generically; technical detail never reaches the UI.
 | --- | --- | --- |
 | Neo4j connection failure | DB not started; wrong URI/port | Start it; verify `NEO4J_URI` |
 | Neo4j rejects credentials | Wrong user/password | Fix `NEO4J_USER`/`NEO4J_PASSWORD` in `.env` or sidebar |
-| Ollama unavailable | Ollama not running; wrong endpoint | Start it; verify `OLLAMA_BASE_URL` |
-| Model unavailable | Tag not pulled | `ollama pull <tag>`; fix `OLLAMA_MODEL` |
+| Gemini key missing | `GEMINI_API_KEY` not set | Set it in `.env` or Streamlit secrets |
+| Gemini key rejected | Invalid/disabled key | Create a new key in Google AI Studio |
+| Gemini rate limited | Free-tier quota exhausted | Wait, or switch `GEMINI_MODEL` |
+| Model not available | Wrong model name | Fix `GEMINI_MODEL` |
 | Missing environment variables | `.env` missing/renamed | Copy `.env.example` → `.env` and fill in |
 | Empty graph | Nothing ingested | Ingest documents first |
-| Extraction failure | Model returned junk JSON / too-short text | Re-check model in `ollama run`; try clearer/longer text |
-| Invalid LLM response | Model not obeying JSON instruction | Use a larger model; the prompt asks for JSON only |
+| Extraction failure | Model returned junk JSON / too-short text | Try clearer/longer text or a stronger Gemini model |
+| Invalid LLM response | Model not obeying JSON instruction | The gateway already requests JSON mode; try another model |
 | No retrieval results | Question vocabulary absent from graph | Rephrase with graph terms or ingest more |
 | Streamlit errors | Dependency mismatch | `pip install -r requirements.txt`; restart |
 | Dependency errors | Missing dev packages | `pip install -r requirements-dev.txt` |
-| Model requests hang | Slow first load on CPU | Raise `NEXORA_LLM_TIMEOUT` |
+| Model requests hang | Slow network / large prompt | Raise `NEXORA_LLM_TIMEOUT` |
 
 ---
 
@@ -835,7 +865,7 @@ ruff format .     # auto-format
 Warnings are promoted to errors in the test run (`filterwarnings = error`), so
 resource leaks and unraisable exceptions fail CI instead of silently passing.
 
-What is tested (all offline, no Neo4j/Ollama required):
+What is tested (all offline; Gemini is mocked, no Neo4j required):
 
 - `test_config.py` — defaults, env parsing, `.env` fallback, env precedence,
   clamping, overrides, signatures.
@@ -845,13 +875,15 @@ What is tested (all offline, no Neo4j/Ollama required):
 - `test_retrieval.py` — term derivation, seed ranking, context assembly with a
   fake store, early-exit once the context cap is reached.
 - `test_answering.py` — citation parsing/verification, answer synthesis.
-- `test_llm.py` — prompt formatting, response extraction (dict vs typed
-  objects), model-tag matching.
+- `test_llm.py` — prompt formatting, response/model-name extraction, JSON mode,
+  and gateway behaviour against an injected fake Gemini client (success, empty
+  response, rate limit, server error, auth error, missing key).
 - `test_service.py` — input validation that never reaches the network and
   health-report logic exercised against fake connectors/gateways (including
-  single-fetch of the installed-model list).
+  single-fetch of the available-model list).
+- `test_ui_state.py` — the `st.secrets` → environment bridge (Cloud support).
 
-Cannot be tested without live services: real Cypher execution, real Ollama
+Cannot be tested without live services: real Cypher execution, real Gemini
 generation, health probes against a live server. Those are integration tests
 you must run manually with services up (System tab → Run diagnostics).
 
@@ -859,9 +891,11 @@ you must run manually with services up (System tab → Run diagnostics).
 
 ## 23. Maintenance Guide
 
-- **Change the LLM/model:** set `OLLAMA_MODEL` in `.env` (or sidebar) and pull
-  the tag. To change *how* the model is prompted, edit
-  `nexora/llm/prompts.py`. To change request timeout, `NEXORA_LLM_TIMEOUT`.
+- **Change the LLM/model:** set `GEMINI_MODEL` in `.env` (or sidebar). To change
+  *how* the model is prompted, edit `nexora/llm/prompts.py`. To change request
+  timeout, `NEXORA_LLM_TIMEOUT`. To change provider entirely, rewrite
+  `nexora/llm/gateway.py` (only that module and `config.py`/`errors.py` know
+  about Gemini).
 - **Change Neo4j configuration:** `.env` (`NEO4J_*`), or sidebar. Schema
   changes go in `nexora/db/statements.py` (+ repository methods).
 - **Change extraction behaviour:** `nexora/pipeline/extraction.py` (parsing,
@@ -885,35 +919,46 @@ you must run manually with services up (System tab → Run diagnostics).
 
 ## 24. Deployment Considerations
 
-Facts only — Nexora ships local, single-machine tooling:
+Nexora is designed to run either locally or as a managed web app:
 
-- **Local run** (`streamlit run app.py`) is the primary deployment: Streamlit’s
-  dev server, console logs, no auth.
-- **Docker Compose** (`docker compose up --build`) runs Neo4j + Ollama +
-  Streamlit on one host. Neo4j and Ollama data live in named volumes
-  (`neo4j_data`, `ollama_data`).
+- **Local run** (`streamlit run app.py`) needs only a Neo4j instance and a
+  Gemini API key. Streamlit’s dev server, console logs, no auth.
+- **Streamlit Community Cloud** is the simplest public deployment. Configuration
+  (including `GEMINI_API_KEY`) is provided through the app’s **Secrets**
+  dashboard; `nexora/ui/state.py` bridges those secrets into the environment.
+  Pair it with a free **Neo4j AuraDB** instance.
+- **Docker Compose** (`docker compose up --build`) runs Neo4j + the Streamlit
+  app on one host; inference stays on Gemini, so there is no model container.
+  Neo4j data lives in the `neo4j_data` named volume.
+- **Self-hosted VPS** (Docker Compose + Caddy reverse proxy with Basic Auth) is
+  documented in `docs/DEPLOYMENT.md`.
 - **Streamlit has no built-in multi-user auth.** For anything beyond a trusted
-  LAN/demo, put it behind an authenticated reverse proxy; there is no
-  user/authorisation model in the app.
-- **Secrets** must arrive via environment variables; the Compose file uses
-  example credentials you should change.
+  LAN, use the reverse proxy in the deployment guide or Streamlit Cloud’s
+  privacy settings; there is no user/authorisation model in the app.
+- **Secrets** must arrive via environment variables or Streamlit secrets; the
+  Compose file uses example Neo4j credentials you should change.
 - Streamlit session state resets on restart — no server-side persistence of
   answers/settings (the graph in Neo4j *is* persistent).
 
 ## 25. Security Considerations
 
-- **Secret management:** all credentials via env/`.env`; `.env` is git-ignored;
-  never commit it. `.env.example` holds placeholders only.
+- **Secret management:** the Gemini API key and Neo4j credentials arrive via
+  env/`.env` or Streamlit secrets; `.env` and `.streamlit/secrets.toml` are
+  git-ignored; never commit them. `.env.example` holds placeholders only.
+- **API key handling:** the Gemini key is never logged, displayed or included
+  in `InferenceError` details. The gateway logs only “set”/“missing”.
 - **Database credentials:** never logged. `Neo4jConnector` logs only the URI,
-  never the password. `Settings.signature()` (which includes the password) is
-  held only in session state, never logged.
+  never the password. `Settings.signature()` (which includes secrets) is held
+  only in session state, never logged.
+- **Data egress:** document text and questions are sent to the Google Gemini
+  API for extraction and answering; the knowledge graph stays in Neo4j.
 - **Environment variables:** process env takes precedence over `.env`; malformed
   numeric values fall back to safe defaults (clamped).
-- **Logging:** log lines never include passwords or document bodies; documents
-  are referred to by label. LLM replies may be logged at DEBUG as part of
-  exception detail only via `detail=` strings.
+- **Logging:** log lines never include secrets or document bodies; documents
+  are referred to by label. Model replies may appear in error `detail=` strings
+  only.
 - **Input validation:** Cypher is fully parameterised (no string-built queries
-  except the integer depth). LLM output is HTML-escaped in the UI before
+  except the integer depth). Model output is HTML-escaped in the UI before
   rendering to prevent markup injection.
 - **Graph scope:** the “erase” wipe deletes **only** Nexora’s own nodes
   (`Entity` and `Document`); unrelated data in a shared database is left
@@ -941,12 +986,12 @@ Honest list of what this version does *not* do:
 5. **Long documents.** The whole document text is sent to the extraction model
    in one call; very long texts may exceed the model’s context window. There
    is no chunking yet.
-6. **Citation behaviour depends on the model.** Small models frequently omit
+6. **Citation behaviour depends on the model.** Some models occasionally omit
    inline citations; Nexora cannot force them and will then show an answer
    without source cards.
 7. **Text input only.** There is no PDF/DOCX/URL ingestion.
-8. **Requires both services.** Full functionality needs a running Neo4j and a
-   running Ollama with the configured model installed.
+8. **Requires both services.** Full functionality needs a running Neo4j
+   database and a valid Gemini API key (and outbound network access to Google).
 9. **No schema migration.** Existing graphs are not migrated automatically
    when the schema changes; wipe and re-ingest instead.
 10. **Streamlit session state** resets when the server restarts.

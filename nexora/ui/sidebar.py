@@ -19,10 +19,10 @@ def _render_service_summary() -> None:
         st.caption("Run diagnostics on the System tab to see service health.")
         return
     lines = []
-    order = ("Graph database", "Model service", "Configured model")
+    order = ("Graph database", "Gemini API", "Configured model")
     labels = {
         "Graph database": "Neo4j",
-        "Model service": "Ollama",
+        "Gemini API": "Gemini",
         "Configured model": "Model",
     }
     for component in order:
@@ -99,16 +99,28 @@ def render_sidebar() -> None:
                     "to the password your Neo4j server actually uses.]"
                 )
 
-            st.markdown("**Local model service (Ollama)**")
-            ollama_url = st.text_input(
-                "Endpoint", value=settings.ollama_base_url, key="field_ollama"
+            st.markdown("**Google Gemini API**")
+            api_key = st.text_input(
+                "API key",
+                value=settings.gemini_api_key,
+                type="password",
+                key="field_api_key",
+                help=(
+                    "Create a key in Google AI Studio. Stored only for this "
+                    "browser session; never written to disk."
+                ),
             )
             model_name = st.text_input(
-                "Model tag",
-                value=settings.model_name,
+                "Model",
+                value=settings.gemini_model,
                 key="field_model",
-                help="Run 'ollama list' to see installed tags.",
+                help="e.g. gemini-2.5-flash, gemini-2.0-flash.",
             )
+            if not api_key.strip():
+                st.caption(
+                    ":orange[No Gemini API key set - extraction and answering "
+                    "will fail until GEMINI_API_KEY is provided.]"
+                )
 
             st.markdown("**Retrieval behaviour**")
             col_depth, col_cap = st.columns(2)
@@ -129,8 +141,8 @@ def render_sidebar() -> None:
                 neo4j_user=user.strip(),
                 neo4j_password=password,
                 neo4j_database=(database.strip() or None),
-                ollama_base_url=ollama_url.strip(),
-                model_name=model_name.strip(),
+                gemini_api_key=api_key.strip(),
+                gemini_model=model_name.strip(),
                 retrieval_depth=depth,
                 context_cap=cap,
             )
@@ -153,8 +165,8 @@ def render_sidebar() -> None:
                 "<p style='font-size:0.86rem;color:#6B7280;line-height:1.5;'>"
                 "Nexora indexes documents as typed entities and links in Neo4j. "
                 "Questions are answered by retrieving entry points, expanding "
-                "through neighbouring entities and asking a local model to "
-                "reason over the assembled evidence. Every claim is expected "
+                "through neighbouring entities and asking the Google Gemini API "
+                "to reason over the assembled evidence. Every claim is expected "
                 "to cite the evidence entries it relies on.</p>"
             )
         st.caption(f"{BRAND} {VERSION}")

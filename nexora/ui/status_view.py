@@ -19,7 +19,7 @@ from nexora.ui.theme import render_metric_grid, render_raw, status_pill
 def _run_diagnostics() -> None:
     try:
         assistant = get_assistant()
-        with st.spinner("Probing Neo4j and Ollama..."):
+        with st.spinner("Probing Neo4j and the Gemini API..."):
             probes = assistant.health_report()
             overview = assistant.overview()
         remember_probes(probes)
@@ -35,7 +35,7 @@ def _render_probes(probes) -> None:
             f"<b>{_escape(probe.component)}</b> &nbsp;-&nbsp; {_escape(probe.message)}"
         )
         if probe.extra:
-            with st.expander(f"Installed models ({len(probe.extra)})"):
+            with st.expander(f"Available models ({len(probe.extra)})"):
                 for tag in probe.extra:
                     st.code(tag, language=None)
 
@@ -101,8 +101,8 @@ def _escape(value: object) -> str:
 def render() -> None:
     st.header("System status")
     st.caption(
-        "Probe the live connectivity of Neo4j and Ollama, review what is "
-        "stored in the graph, or reset the workspace."
+        "Probe the live connectivity of Neo4j and the Gemini API, review what "
+        "is stored in the graph, or reset the workspace."
     )
 
     if st.button("Run diagnostics", type="primary"):

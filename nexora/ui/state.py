@@ -3,11 +3,17 @@
 These helpers keep Streamlit ``session_state`` access in one place so views
 stay declarative.  The assistant is cached per settings signature and rebuilt
 whenever the sidebar settings change.
+
+It is also the bridge that lets the engine stay Streamlit-free: on Streamlit
+Community Cloud configuration arrives through ``st.secrets``, so this module
+copies the recognised keys into the process environment before settings are
+read.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 
 import streamlit as st
 
@@ -18,10 +24,60 @@ from nexora.service import KnowledgeAssistant
 
 logger = logging.getLogger(__name__)
 
+# Only these keys are ever copied out of Streamlit secrets, so an unexpected
+# secret can never silently influence the engine.
+SECRET_KEYS = (
+    "GEMINI_API_KEY",
+    "GEMINI_MODEL",
+    "NEO4J_URI",
+    "NEO4J_USER",
+    "NEO4J_PASSWORD",
+    "NEO4J_DATABASE",
+    "NEXORA_RETRIEVAL_DEPTH",
+    "NEXORA_CONTEXT_LIMIT",
+    "NEXORA_ENTRY_LIMIT",
+    "NEXORA_LLM_TIMEOUT",
+    "NEXORA_LOG_LEVEL",
+)
+
+
+def hydrate_environment_from_secrets() -> tuple[str, ...]:
+    """Copy recognised ``st.secrets`` values into the process environment.
+
+    The engine only ever reads configuration from the environment, which works
+    for local ``.env`` files and container deployments. Streamlit Community
+    Cloud injects secrets through ``st.secrets`` instead, so this bridge makes
+    Cloud deployments work without the engine importing Streamlit.
+
+    Real environment variables take precedence (``os.environ.setdefault``), and
+    the names of the keys that were applied are returned for testing.
+    """
+    try:
+        secrets = st.secrets
+    except Exception:
+        return ()
+
+    applied: list[str] = []
+    for key in SECRET_KEYS:
+        try:
+            value = secrets[key]
+        except Exception:
+            continue
+        if value is None:
+            continue
+        text = str(value).strip()
+        if not text:
+            continue
+        if key not in os.environ:
+            os.environ[key] = text
+            applied.append(key)
+    return tuple(applied)
+
 
 def current_settings() -> Settings:
     """Return the session settings, seeding from the environment on first use."""
     if "settings" not in st.session_state:
+        hydrate_environment_from_secrets()
         st.session_state["settings"] = Settings.from_environment()
     return st.session_state["settings"]
 

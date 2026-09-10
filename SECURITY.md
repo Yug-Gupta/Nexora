@@ -1,8 +1,10 @@
 # Security
 
-Nexora is a **local-first** application: documents, the knowledge graph and the
-LLM all run on your own machine or a private network. This page summarises the
-security posture and how to report a problem.
+Nexora stores its knowledge graph in your own Neo4j database but sends document
+text and questions to the **Google Gemini API** for extraction and answering.
+Secrets (the Gemini API key and the Neo4j password) are provided through the
+environment or Streamlit secrets and are never written into the repository.
+This page summarises the security posture and how to report a problem.
 
 ## Reporting a vulnerability
 
@@ -18,23 +20,29 @@ We treat reports seriously and will acknowledge them as soon as possible.
 
 ## Security notes
 
-- **Credentials never live in code.** All secrets arrive via environment
-  variables or a local `.env` file that is git-ignored; `.env.example` holds
-  placeholders only.
+- **Secrets never live in code.** The Gemini API key and Neo4j password arrive
+  via environment variables, a git-ignored `.env` file, or Streamlit secrets;
+  `.env.example` holds placeholders only.
+- **The API key is never logged or displayed.** The Gemini gateway logs only
+  whether a key is present; health checks and error messages never echo the key
+  or its length.
 - **Database credentials are never logged.** Logs refer to services and labels,
   never passwords or document bodies.
 - **Cypher is fully parameterised.** The only interpolated query value is a
   validated integer depth bound.
-- **LLM output is escaped.** Model and user text is HTML-escaped before it is
+- **Model output is escaped.** Model and user text is HTML-escaped before it is
   rendered in the UI, preventing markup injection.
 - **Scoped reset.** The "erase the graph" action removes only Nexora
   `Entity`/`Document` nodes; unrelated data in a shared database is left intact.
-- **No built-in multi-user auth.** Streamlit provides no user model. For
-  anything beyond a trusted network, put the app behind an authenticated
-  reverse proxy.
+- **No built-in multi-user auth.** Streamlit provides no user model. For a
+  public demo, use an authenticated reverse proxy (see `docs/DEPLOYMENT.md`) or
+  Streamlit Cloud's app privacy controls.
 
-## Local deployment checklist
+## Deployment checklist
 
+- Create a dedicated Gemini API key for the deployment and be ready to revoke
+  it if it leaks.
+- Never commit `.env` or `.streamlit/secrets.toml` (both are git-ignored).
 - Replace the example Neo4j credentials used by `docker-compose.yml`.
-- Keep `.env` out of version control (it already is via `.gitignore`).
-- Use a dedicated Neo4j database for Nexora where possible.
+- Use a dedicated Neo4j database (or AuraDB instance) for Nexora where possible.
+- Firewall a self-hosted VPS so only `22/80/443` are reachable.

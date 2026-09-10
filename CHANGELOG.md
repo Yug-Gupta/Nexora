@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Migrated inference from Ollama to the Google Gemini API** using the
+  official `google-genai` SDK. The application-facing gateway interface
+  (`complete`, `available_models`, `model_is_installed`) is unchanged, so the
+  UI and pipeline remain provider-agnostic.
+- Configuration now uses `GEMINI_API_KEY` (secret) and `GEMINI_MODEL`; the
+  Ollama endpoint/model variables are gone. Neo4j settings are unchanged and
+  remain fully configurable for AuraDB.
+- Extraction uses Gemini JSON response mode; malformed output, missing keys,
+  API errors, rate limits and timeouts map onto the existing error types.
+- Health checks and the System Status UI now report **Gemini API** readiness
+  instead of an Ollama service; the API key is never displayed or logged.
+- Tests mock the Gemini client — no live API requests.
+- Docker Compose drops the Ollama service; the stack is now Neo4j + the app.
+- Streamlit Community Cloud is supported via a secrets-to-environment bridge
+  (`nexora/ui/state.py`).
+
 ### Planned
+- A pluggable provider interface so Gemini and other LLMs can be swapped freely.
 - Hybrid retrieval with embeddings / vector search.
 - Full-text and fuzzy entity matching (Neo4j full-text indexes).
 - Chunking for long documents with per-chunk citations.

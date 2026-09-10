@@ -2,7 +2,7 @@
 
 Nexora turns unstructured documents into a typed knowledge graph inside
 Neo4j, then answers natural-language questions by walking that graph
-(multi-hop retrieval) and letting a local language model compose grounded,
+(multi-hop retrieval) and letting the Google Gemini API compose grounded,
 traceable answers over the retrieved evidence.
 
 The package is split into focused layers:
@@ -11,7 +11,7 @@ The package is split into focused layers:
 * ``nexora.errors``     - typed application errors and translator helpers
 * ``nexora.models``     - domain records shared across every layer
 * ``nexora.db``         - Neo4j connection, Cypher statements and repository
-* ``nexora.llm``        - Ollama gateway and prompt templates
+* ``nexora.llm``        - Gemini gateway and prompt templates
 * ``nexora.pipeline``   - extraction, retrieval and answering stages
 * ``nexora.ui``         - Streamlit presentation layer (imports Streamlit)
 * ``nexora.service``    - the facade that wires everything for the UI

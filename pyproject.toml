@@ -9,7 +9,7 @@ python_files = ["test_*.py"]
 filterwarnings = [
     "error",
     "ignore::DeprecationWarning:streamlit.*",
-    "ignore::DeprecationWarning:ollama.*",
+    "ignore::DeprecationWarning:google.*",
 ]
 
 [tool.ruff]

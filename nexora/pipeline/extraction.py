@@ -1,6 +1,6 @@
-"""Turn a plain-text document into entities and relations via the local model.
+"""Turn a plain-text document into entities and relations via Gemini.
 
-The module is deliberately defensive: small local models do not always emit
+The module is deliberately defensive: language models do not always emit
 clean JSON, sometimes use different field names, occasionally duplicate
 entities and frequently reference relation endpoints that were never listed.
 Every one of those failure modes is normalised or rejected here.
@@ -173,7 +173,7 @@ def extract_graph_elements(
     gateway: InferenceGateway,
     model_name: str | None = None,
 ) -> tuple[list[Entity], list[Relation]]:
-    """Ask the local model to structure a document, then validate the result."""
+    """Ask Gemini to structure a document, then validate the result."""
     prompt = build_extraction_prompt(document_text)
     try:
         reply = gateway.complete(prompt, model_name=model_name, expect_json=True)

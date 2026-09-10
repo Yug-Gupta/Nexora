@@ -50,21 +50,26 @@ class _DownConnector:
 
 
 class _Gateway:
-    """Records how often the model list is fetched from the server."""
+    """Records how often the model list is fetched from the Gemini API."""
 
-    def __init__(self, installed, default_model="llama3.2"):
-        self._installed = installed
+    def __init__(self, available, default_model="gemini-2.5-flash"):
+        self._available = available
         self.default_model = default_model
         self.list_calls = 0
 
+    @staticmethod
+    def _norm(name):
+        text = (name or "").strip()
+        return text[len("models/") :] if text.startswith("models/") else text
+
     def available_models(self):
         self.list_calls += 1
-        return list(self._installed)
+        return list(self._available)
 
     def model_is_installed(self, model_name=None, *, installed=None):
-        wanted = (model_name or self.default_model).partition(":")[0]
+        wanted = self._norm(model_name or self.default_model)
         return any(
-            tag.partition(":")[0] == wanted for tag in (installed or self._installed)
+            self._norm(name) == wanted for name in (installed or self._available)
         )
 
 
@@ -77,32 +82,32 @@ def _assistant_with(connector, gateway) -> KnowledgeAssistant:
 
 
 def test_health_report_reports_all_services_healthy(assistant):
-    service = _assistant_with(_OkConnector(), _Gateway(["llama3.2:latest"]))
+    service = _assistant_with(_OkConnector(), _Gateway(["gemini-2.5-flash"]))
     probes = service.health_report()
     by_name = {probe.component: probe for probe in probes}
-    assert set(by_name) == {"Graph database", "Model service", "Configured model"}
+    assert set(by_name) == {"Graph database", "Gemini API", "Configured model"}
     assert all(probe.available for probe in probes)
     assert "Ready." in by_name["Configured model"].message
 
 
 def test_health_report_fetches_model_list_exactly_once():
-    gateway = _Gateway(["llama3.2:latest"])
+    gateway = _Gateway(["models/gemini-2.5-flash"])
     service = _assistant_with(_OkConnector(), gateway)
     service.health_report()
     assert gateway.list_calls == 1
 
 
-def test_health_report_reports_model_missing_when_not_installed():
-    gateway = _Gateway(["qwen2.5:7b"], default_model="llama3.2")
+def test_health_report_reports_model_missing_when_unavailable():
+    gateway = _Gateway(["gemini-2.0-flash"], default_model="gemini-2.5-flash")
     service = _assistant_with(_OkConnector(), gateway)
     probes = service.health_report()
     model = next(p for p in probes if p.component == "Configured model")
     assert model.available is False
-    assert "not installed" in model.message
+    assert "not available" in model.message
 
 
 def test_health_report_handles_graph_database_outage():
-    service = _assistant_with(_DownConnector(), _Gateway(["llama3.2:latest"]))
+    service = _assistant_with(_DownConnector(), _Gateway(["gemini-2.5-flash"]))
     probes = service.health_report()
     graph = next(p for p in probes if p.component == "Graph database")
     assert graph.available is False
@@ -111,14 +116,14 @@ def test_health_report_handles_graph_database_outage():
 
 def test_health_report_handles_model_service_outage():
     class _Broken:
-        default_model = "llama3.2"
+        default_model = "gemini-2.5-flash"
 
         def available_models(self):
             raise ConnectionError("connection refused")
 
     service = _assistant_with(_OkConnector(), _Broken())
     probes = service.health_report()
-    model_service = next(p for p in probes if p.component == "Model service")
+    gemini = next(p for p in probes if p.component == "Gemini API")
     configured = next(p for p in probes if p.component == "Configured model")
-    assert model_service.available is False
+    assert gemini.available is False
     assert configured.available is False

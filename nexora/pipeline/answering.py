@@ -1,6 +1,6 @@
 """Compose a grounded answer and verify the citations inside it.
 
-The answer stage hands the retrieved context to the local model as numbered
+The answer stage hands the retrieved context to Gemini as numbered
 entries and asks it to cite them inline as ``[1]``, ``[2]`` and so on.  After
 generation every bracket citation found in the text is resolved back to a
 context entry; citations that do not correspond to a real entry are simply

@@ -40,9 +40,7 @@ def _run_ingestion() -> None:
         return
     try:
         assistant = get_assistant()
-        with st.spinner(
-            "Extracting entities and relationships with the local model..."
-        ):
+        with st.spinner("Extracting entities and relationships with Gemini..."):
             report = assistant.ingest_document(
                 document_text=text,
                 source_label=label,
@@ -117,7 +115,7 @@ def render() -> None:
     st.header("Ingest knowledge")
     st.caption(
         "Paste a document below, or load one of the built-in examples. The "
-        "local model extracts typed entities and the relationships between "
+        "Gemini model extracts typed entities and the relationships between "
         "them, and Nexora writes them into the Neo4j knowledge graph."
     )
 

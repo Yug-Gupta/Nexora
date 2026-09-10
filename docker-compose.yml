@@ -1,9 +1,21 @@
-# Nexora development stack: Neo4j + Ollama + the Streamlit application.
+# Nexora development stack: Neo4j + the Streamlit application.
 #
 #   docker compose up --build
 #
-# After the stack is healthy, pull a model inside the Ollama container:
-#   docker exec nexora-ollama ollama pull llama3.2
+# Model inference runs through the Google Gemini API, so no model container is
+# needed. Provide your API key via a root .env file (see .env.example):
+#
+#   GEMINI_API_KEY=...        # required, never commit this
+#   GEMINI_MODEL=gemini-2.5-flash
+#
+# To point the app at an external Neo4j (e.g. AuraDB) instead of the bundled
+# container, set NEO4J_URI / NEO4J_USER / NEO4J_PASSWORD in .env.
+#
+# IMPORTANT: with the bundled container, the app must talk to the service name
+# `graphdb`, not localhost. If your local `.env` sets NEO4J_URI to
+# bolt://127.0.0.1:7687 (for `streamlit run`), override it for Compose:
+#   NEO4J_URI=bolt://graphdb:7687 docker compose up --build
+# or remove that line from `.env` while using Compose.
 #
 # Then open http://localhost:8501
 
@@ -15,7 +27,7 @@ services:
       - "7474:7474"
       - "7687:7687"
     environment:
-      - NEO4J_AUTH=neo4j/password
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-password}
     volumes:
       - neo4j_data:/data
     healthcheck:
@@ -23,20 +35,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  modelbox:
-    image: ollama/ollama:latest
-    container_name: nexora-ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    healthcheck:
-      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 20s
 
   studio:
     build:
@@ -46,17 +44,15 @@ services:
     ports:
       - "8501:8501"
     environment:
-      - NEO4J_URI=bolt://graphdb:7687
-      - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=password
-      - OLLAMA_BASE_URL=http://modelbox:11434
-      - OLLAMA_MODEL=llama3.2
+      - NEO4J_URI=${NEO4J_URI:-bolt://graphdb:7687}
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
+      - NEO4J_DATABASE=${NEO4J_DATABASE:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
     depends_on:
       graphdb:
-        condition: service_healthy
-      modelbox:
         condition: service_healthy
 
 volumes:
   neo4j_data:
-  ollama_data:

@@ -26,8 +26,10 @@ EXPOSE 8501
 ENV NEO4J_URI=bolt://127.0.0.1:7687 \
     NEO4J_USER=neo4j \
     NEO4J_PASSWORD=password \
-    OLLAMA_BASE_URL=http://127.0.0.1:11434 \
-    OLLAMA_MODEL=llama3.2
+    GEMINI_MODEL=gemini-2.5-flash
+
+# GEMINI_API_KEY is intentionally NOT baked into the image. Pass it at runtime:
+#   docker run -e GEMINI_API_KEY=... or via docker-compose/.env or Streamlit secrets.
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=5)"

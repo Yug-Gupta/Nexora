@@ -33,7 +33,7 @@ class StorageError(AppError):
 
 
 class InferenceError(AppError):
-    """Anything that goes wrong talking to the local language model."""
+    """Anything that goes wrong talking to the language-model provider."""
 
 
 class SourceError(AppError):
@@ -78,22 +78,58 @@ def translate_storage_failure(exc: Exception) -> StorageError:
 
 
 def translate_inference_failure(exc: Exception) -> InferenceError:
-    """Map an Ollama SDK failure onto a user-friendly :class:`InferenceError`."""
+    """Map a Gemini (``google-genai``) failure onto a friendly error.
+
+    The SDK raises ``ClientError`` for 4xx responses (bad key, bad request,
+    rate limits) and ``ServerError`` for 5xx, both carrying a numeric ``code``.
+    Network problems surface as transport exceptions. The API key is never
+    included in the message or the detail.
+    """
     kind = type(exc).__name__
     lowered = str(exc).lower()
+    code = getattr(exc, "code", None)
+
+    is_client_error = False
+    is_server_error = False
+    try:
+        from google.genai import errors as genai_errors
+
+        is_client_error = isinstance(exc, genai_errors.ClientError)
+        is_server_error = isinstance(exc, genai_errors.ServerError)
+    except ImportError:  # SDK not installed yet
+        lowered_kind = kind.lower()
+        is_client_error = "clienterror" in lowered_kind
+        is_server_error = "servererror" in lowered_kind
+
     if (
+        code == 429
+        or "rate limit" in lowered
+        or "quota" in lowered
+        or "resource_exhausted" in lowered
+    ):
+        message = "The Gemini API rate limit was reached. Wait a moment and try again."
+    elif code in (401, 403) or "api key" in lowered or "permission" in lowered:
+        message = "The Gemini API key was rejected. Check that GEMINI_API_KEY is valid."
+    elif code == 400 or "invalid" in lowered:
+        message = (
+            "The Gemini API rejected the request. Check the configured model and input."
+        )
+    elif is_server_error or (isinstance(code, int) and code >= 500):
+        message = "The Gemini API is temporarily unavailable. Please try again shortly."
+    elif "timeout" in lowered or "timed out" in lowered:
+        message = (
+            "The Gemini API took too long to answer. Try again or use a faster model."
+        )
+    elif (
         "connect" in lowered
         or "connection" in lowered
         or isinstance(exc, ConnectionError)
     ):
-        message = "Could not reach the Ollama service. Is it running?"
-    elif "not found" in lowered or "pull" in lowered:
-        message = "The requested model is not installed on the Ollama server."
-    elif "timeout" in lowered:
-        message = (
-            "The Ollama service took too long to answer. "
-            "Try again or use a faster model."
-        )
+        message = "Could not reach the Gemini API. Check your network connection."
+    elif "not found" in lowered or "does not exist" in lowered:
+        message = "The requested Gemini model is not available for this API key."
+    elif is_client_error:
+        message = "The Gemini API rejected the request. Check your configuration."
     else:
-        message = "The local language model could not complete the request."
+        message = "The Gemini API could not complete the request."
     return InferenceError(message, detail=f"{kind}: {exc}")

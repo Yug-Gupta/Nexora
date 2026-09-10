@@ -1,1 +1,1 @@
-"""Local language model integration layer (Ollama)."""
+"""Language-model integration layer (Google Gemini via ``google-genai``)."""
