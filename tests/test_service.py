@@ -52,7 +52,7 @@ class _DownConnector:
 class _Gateway:
     """Records how often the model list is fetched from the Gemini API."""
 
-    def __init__(self, available, default_model="gemini-2.5-flash"):
+    def __init__(self, available, default_model="gemini-3.6-flash"):
         self._available = available
         self.default_model = default_model
         self.list_calls = 0
@@ -82,7 +82,7 @@ def _assistant_with(connector, gateway) -> KnowledgeAssistant:
 
 
 def test_health_report_reports_all_services_healthy(assistant):
-    service = _assistant_with(_OkConnector(), _Gateway(["gemini-2.5-flash"]))
+    service = _assistant_with(_OkConnector(), _Gateway(["gemini-3.6-flash"]))
     probes = service.health_report()
     by_name = {probe.component: probe for probe in probes}
     assert set(by_name) == {"Graph database", "Gemini API", "Configured model"}
@@ -91,14 +91,14 @@ def test_health_report_reports_all_services_healthy(assistant):
 
 
 def test_health_report_fetches_model_list_exactly_once():
-    gateway = _Gateway(["models/gemini-2.5-flash"])
+    gateway = _Gateway(["models/gemini-3.6-flash"])
     service = _assistant_with(_OkConnector(), gateway)
     service.health_report()
     assert gateway.list_calls == 1
 
 
 def test_health_report_reports_model_missing_when_unavailable():
-    gateway = _Gateway(["gemini-2.0-flash"], default_model="gemini-2.5-flash")
+    gateway = _Gateway(["gemini-2.0-flash"], default_model="gemini-3.6-flash")
     service = _assistant_with(_OkConnector(), gateway)
     probes = service.health_report()
     model = next(p for p in probes if p.component == "Configured model")
@@ -107,7 +107,7 @@ def test_health_report_reports_model_missing_when_unavailable():
 
 
 def test_health_report_handles_graph_database_outage():
-    service = _assistant_with(_DownConnector(), _Gateway(["gemini-2.5-flash"]))
+    service = _assistant_with(_DownConnector(), _Gateway(["gemini-3.6-flash"]))
     probes = service.health_report()
     graph = next(p for p in probes if p.component == "Graph database")
     assert graph.available is False
@@ -116,7 +116,7 @@ def test_health_report_handles_graph_database_outage():
 
 def test_health_report_handles_model_service_outage():
     class _Broken:
-        default_model = "gemini-2.5-flash"
+        default_model = "gemini-3.6-flash"
 
         def available_models(self):
             raise ConnectionError("connection refused")

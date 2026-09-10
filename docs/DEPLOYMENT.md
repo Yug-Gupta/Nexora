@@ -23,7 +23,7 @@ or a free **Neo4j AuraDB** instance).
 
    ```toml
    GEMINI_API_KEY = "your_gemini_api_key_here"
-   GEMINI_MODEL = "gemini-2.5-flash"
+   GEMINI_MODEL = "gemini-3.6-flash"
 
    NEO4J_URI = "neo4j+s://<your-instance-id>.databases.neo4j.io"
    NEO4J_USER = "neo4j"
@@ -86,7 +86,7 @@ Edit `.env` and set at least:
 
 ```dotenv
 GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.6-flash
 NEO4J_PASSWORD=choose-a-strong-password
 ```
 

@@ -126,7 +126,12 @@ or builds prompts. They meet at one facade — `nexora.service.KnowledgeAssistan
    a demo).
 2. Store it as the `GEMINI_API_KEY` environment variable — **never** put it in
    source code, commit it, or paste it into logs/screenshots.
-3. Pick a model with `GEMINI_MODEL` (e.g. `gemini-2.5-flash`).
+3. Pick a model with `GEMINI_MODEL` (e.g. `gemini-3.6-flash`).
+
+> Older tags such as `gemini-2.5-flash` are no longer served to newly created
+> API keys and fail at generation time with `404 NOT_FOUND`. If you see that,
+> switch `GEMINI_MODEL` to a current model — the *System status* tab lists
+> every model your key can use.
 
 ### Never commit your key
 
@@ -147,7 +152,7 @@ API rather than a local model server.
 
    ```toml
    GEMINI_API_KEY = "your_gemini_api_key_here"
-   GEMINI_MODEL = "gemini-2.5-flash"
+   GEMINI_MODEL = "gemini-3.6-flash"
 
    NEO4J_URI = "neo4j+s://<your-instance-id>.databases.neo4j.io"
    NEO4J_USER = "neo4j"
@@ -221,7 +226,7 @@ defaults. Copy `.env.example` to `.env` (local) or use Streamlit secrets
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `GEMINI_API_KEY` | *(empty)* | **Required.** Google Gemini API key (secret) |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model for extraction and answering |
+| `GEMINI_MODEL` | `gemini-3.6-flash` | Gemini model for extraction and answering |
 | `NEO4J_URI` | `bolt://127.0.0.1:7687` | Neo4j Bolt URI (local or `neo4j+s://…` for AuraDB) |
 | `NEO4J_USER` | `neo4j` | Neo4j user name |
 | `NEO4J_PASSWORD` | *(empty)* | Neo4j password |

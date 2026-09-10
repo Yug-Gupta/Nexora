@@ -114,7 +114,7 @@ def render_sidebar() -> None:
                 "Model",
                 value=settings.gemini_model,
                 key="field_model",
-                help="e.g. gemini-2.5-flash, gemini-2.0-flash.",
+                help="e.g. gemini-3.6-flash, gemini-3.5-flash.",
             )
             if not api_key.strip():
                 st.caption(

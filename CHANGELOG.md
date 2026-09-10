@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remain fully configurable for AuraDB.
 - Extraction uses Gemini JSON response mode; malformed output, missing keys,
   API errors, rate limits and timeouts map onto the existing error types.
+- Default model is `gemini-3.6-flash`. Older tags such as `gemini-2.5-flash`
+  are still listed by `models.list()` but are no longer served to new API keys
+  and fail at generation time with `404 NOT_FOUND`.
+- Automatic function calling is explicitly disabled on every request, removing
+  a noisy SDK warning from the logs.
 - Health checks and the System Status UI now report **Gemini API** readiness
   instead of an Ollama service; the API key is never displayed or logged.
 - Tests mock the Gemini client — no live API requests.

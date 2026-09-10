@@ -23,7 +23,7 @@ _ENV_DEFAULTS = {
     "neo4j_user": "neo4j",
     "neo4j_database": None,
     "gemini_api_key": "",
-    "gemini_model": "gemini-2.5-flash",
+    "gemini_model": "gemini-3.6-flash",
     "retrieval_depth": 2,
     "entry_limit": 8,
     "context_cap": 18,
@@ -106,7 +106,7 @@ class Settings:
     neo4j_password: str = ""
     neo4j_database: str | None = None
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.6-flash"
     retrieval_depth: int = 2
     entry_limit: int = 8
     context_cap: int = 18

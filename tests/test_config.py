@@ -11,7 +11,7 @@ def test_defaults_are_sensible():
     assert settings.neo4j_uri == "bolt://127.0.0.1:7687"
     assert settings.neo4j_user == "neo4j"
     assert settings.gemini_api_key == ""
-    assert settings.gemini_model == "gemini-2.5-flash"
+    assert settings.gemini_model == "gemini-3.6-flash"
     assert 1 <= settings.retrieval_depth <= 6
     assert settings.log_level == "INFO"
 
@@ -63,7 +63,7 @@ def test_with_overrides_is_immutable():
     assert changed.retrieval_depth == 4
     assert changed.gemini_model == "gemini-2.5-pro"
     assert original.retrieval_depth == 2
-    assert original.gemini_model == "gemini-2.5-flash"
+    assert original.gemini_model == "gemini-3.6-flash"
 
 
 def test_signature_changes_when_credentials_change():

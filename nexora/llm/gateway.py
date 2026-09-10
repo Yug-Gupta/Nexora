@@ -187,14 +187,17 @@ class InferenceGateway:
 
         When ``expect_json`` is set the Gemini API is asked to constrain the
         response to valid JSON (`response_mime_type`), which keeps entity and
-        relationship extraction reliable.
+        relationship extraction reliable. Automatic function calling is always
+        disabled: Nexora only ever wants text back, and leaving it on makes the
+        SDK log a warning on every call.
         """
         client = self._require_client()
         model = _model_short_name(model_name or self.default_model)
-        config = (
-            types.GenerateContentConfig(response_mime_type="application/json")
-            if expect_json
-            else None
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json" if expect_json else None,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                disable=True
+            ),
         )
         try:
             response = client.models.generate_content(

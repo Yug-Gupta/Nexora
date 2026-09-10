@@ -169,11 +169,15 @@ def test_complete_requests_json_mode_when_expected():
     assert getattr(config, "response_mime_type", None) == "application/json"
 
 
-def test_complete_without_json_mode_passes_no_config():
+def test_complete_disables_automatic_function_calling():
     fake = _FakeModels(text="answer")
     _gateway(fake).complete("prompt")
     assert fake.last_call is not None
-    assert fake.last_call["config"] is None
+    config = fake.last_call["config"]
+    assert config is not None
+    assert getattr(config, "response_mime_type", "unset") is None
+    afc = getattr(config, "automatic_function_calling", None)
+    assert afc is not None and afc.disable is True
 
 
 def test_complete_uses_configured_model_and_normalises_name():

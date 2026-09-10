@@ -26,7 +26,7 @@ EXPOSE 8501
 ENV NEO4J_URI=bolt://127.0.0.1:7687 \
     NEO4J_USER=neo4j \
     NEO4J_PASSWORD=password \
-    GEMINI_MODEL=gemini-2.5-flash
+    GEMINI_MODEL=gemini-3.6-flash
 
 # GEMINI_API_KEY is intentionally NOT baked into the image. Pass it at runtime:
 #   docker run -e GEMINI_API_KEY=... or via docker-compose/.env or Streamlit secrets.

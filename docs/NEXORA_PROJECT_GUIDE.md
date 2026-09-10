@@ -451,7 +451,7 @@ Cloud the same keys can be provided through `st.secrets` (see §24).
 | Variable | Purpose | Required? | Example | Used in |
 | --- | --- | --- | --- | --- |
 | `GEMINI_API_KEY` | Google Gemini API key (**secret**) | **Yes** | `AIza…` (never commit) | `gateway.py` |
-| `GEMINI_MODEL` | Gemini model for extraction + answering | No (default) | `gemini-2.5-flash` | `service.py`, `gateway.py` |
+| `GEMINI_MODEL` | Gemini model for extraction + answering | No (default) | `gemini-3.6-flash` | `service.py`, `gateway.py` |
 | `NEO4J_URI` | Neo4j Bolt URI (local or `neo4j+s://` AuraDB) | No (default) | `bolt://127.0.0.1:7687` | `connector.py` |
 | `NEO4J_USER` | Neo4j user name | No (default) | `neo4j` | `connector.py` |
 | `NEO4J_PASSWORD` | Neo4j password | **Yes** for a real DB | `change_me` | `connector.py` |
@@ -622,8 +622,14 @@ MERGE works without them; they make it faster and safer.
 1. Create an API key in **Google AI Studio**. Treat it as a secret.
 2. Store it as `GEMINI_API_KEY` in `.env` (local) or in Streamlit secrets
    (Community Cloud). Never commit it, log it or paste it into code.
-3. Choose a model with `GEMINI_MODEL` — the default is `gemini-2.5-flash`;
-   `gemini-2.0-flash` also works.
+3. Choose a model with `GEMINI_MODEL` — the default is `gemini-3.6-flash`;
+   `gemini-3.5-flash` also works.
+
+> **Model retirement gotcha:** `models.list()` can still return older tags
+> (e.g. `gemini-2.5-flash`) that `generate_content` refuses with
+> `404 NOT_FOUND: … no longer available to new users`. The *Configured model*
+> health probe is based on that list, so it may read “Ready” while generation
+> fails; the ingest/answer error message carries the real reason.
 
 ### How Nexora talks to Gemini
 
