@@ -156,6 +156,19 @@ class _ApiBoom(Exception):
         self.code = code
 
 
+class _FlakyModels(_FakeModels):
+    def __init__(self, failures: int, text: str = "answer"):
+        super().__init__(text=text)
+        self.failures = failures
+        self.calls = 0
+
+    def generate_content(self, *, model, contents, config=None):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise _ApiBoom(503, "temporarily unavailable")
+        return super().generate_content(model=model, contents=contents, config=config)
+
+
 def test_complete_returns_stripped_text():
     fake = _FakeModels(text="  generated answer  ")
     assert _gateway(fake).complete("prompt") == "generated answer"
@@ -205,6 +218,25 @@ def test_complete_translates_server_error():
     with pytest.raises(InferenceError) as excinfo:
         _gateway(fake).complete("prompt")
     assert "unavailable" in excinfo.value.message.lower()
+
+
+def test_complete_retries_temporary_server_error(monkeypatch):
+    fake = _FlakyModels(failures=2)
+    delays = []
+    monkeypatch.setattr(gateway.time, "sleep", delays.append)
+
+    assert _gateway(fake).complete("prompt") == "answer"
+    assert fake.calls == 3
+    assert delays == [1.0, 2.0]
+
+
+def test_complete_stops_after_retry_limit(monkeypatch):
+    fake = _FlakyModels(failures=3)
+    monkeypatch.setattr(gateway.time, "sleep", lambda _delay: None)
+
+    with pytest.raises(InferenceError):
+        _gateway(fake).complete("prompt")
+    assert fake.calls == 3
 
 
 def test_complete_translates_auth_error_without_leaking_key():

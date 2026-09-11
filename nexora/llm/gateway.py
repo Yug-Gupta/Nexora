@@ -14,6 +14,7 @@ module, :mod:`nexora.config` and :mod:`nexora.errors`.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from google import genai
@@ -22,6 +23,9 @@ from google.genai import types
 from nexora.errors import InferenceError, translate_inference_failure
 
 logger = logging.getLogger(__name__)
+
+_MAX_RETRIES = 3
+_RETRY_BASE_DELAY_SECONDS = 1.0
 
 
 def _model_short_name(value: Any) -> str:
@@ -99,6 +103,18 @@ def _extract_model_names(response: Any) -> list[str]:
         if short and short not in names:
             names.append(short)
     return sorted(names)
+
+
+def _is_retryable_inference_failure(exc: Exception) -> bool:
+    """Return whether a Gemini failure is likely temporary."""
+    code = getattr(exc, "code", None)
+    if isinstance(code, int) and code in {500, 502, 503, 504}:
+        return True
+    lowered = str(exc).lower()
+    return any(
+        phrase in lowered
+        for phrase in ("temporarily unavailable", "service unavailable", "overloaded")
+    )
 
 
 class InferenceGateway:
@@ -199,12 +215,24 @@ class InferenceGateway:
                 disable=True
             ),
         )
-        try:
-            response = client.models.generate_content(
-                model=model, contents=prompt, config=config
-            )
-        except Exception as exc:
-            raise translate_inference_failure(exc) from exc
+        for attempt in range(_MAX_RETRIES):
+            try:
+                response = client.models.generate_content(
+                    model=model, contents=prompt, config=config
+                )
+                break
+            except Exception as exc:
+                if (
+                    not _is_retryable_inference_failure(exc)
+                    or attempt == _MAX_RETRIES - 1
+                ):
+                    raise translate_inference_failure(exc) from exc
+                delay = _RETRY_BASE_DELAY_SECONDS * (2**attempt)
+                logger.warning(
+                    "Gemini request failed temporarily; retrying in %.1f seconds",
+                    delay,
+                )
+                time.sleep(delay)
 
         text = _extract_response_text(response).strip()
         if not text:
