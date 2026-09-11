@@ -31,6 +31,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replaced the deprecated `use_container_width=True` on buttons and dataframes
   with `width="stretch"`; the minimum Streamlit version is now `1.48.0`.
 - Fixed an unclosed `<div>` in the System status service-health rows.
+- README rewritten as production-level documentation, including the live demo
+  link.
+- Documentation consolidated into a single private technical reference kept out
+  of version control.
+- Corrected a misspelled test name (`test_locale_…` → `test_locate_…`).
+
+### Removed
+- Environment-specific agent-tooling symlinks (`.agents/`, `.claude/`) from
+  version control; they pointed into `.venv` and are now git-ignored.
+- The split `docs/NEXORA_PROJECT_GUIDE.md` and `docs/DEPLOYMENT.md` files,
+  superseded by the single private reference.
 
 ### Planned
 - A pluggable provider interface so Gemini and other LLMs can be swapped freely.

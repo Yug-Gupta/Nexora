@@ -35,8 +35,9 @@ We treat reports seriously and will acknowledge them as soon as possible.
 - **Scoped reset.** The "erase the graph" action removes only Nexora
   `Entity`/`Document` nodes; unrelated data in a shared database is left intact.
 - **No built-in multi-user auth.** Streamlit provides no user model. For a
-  public demo, use an authenticated reverse proxy (see `docs/DEPLOYMENT.md`) or
-  Streamlit Cloud's app privacy controls.
+  public demo, use an authenticated reverse proxy (the `deploy/Caddyfile` +
+  `docker-compose.prod.yml` overlay) or your managed host's app privacy
+  controls.
 
 ## Deployment checklist
 

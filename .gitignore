@@ -15,6 +15,13 @@ env/
 # Streamlit runtime state
 .streamlit/secrets.toml
 
+# Private local technical reference (kept out of version control)
+docs/NEXORA_TECHNICAL_REFERENCE.md
+
+# Agent/editor tooling (contains environment-specific symlinks)
+.agents/
+.claude/
+
 # Test + coverage artifacts
 .pytest_cache/
 .coverage

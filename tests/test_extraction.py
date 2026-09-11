@@ -68,7 +68,7 @@ def test_extract_graph_elements_happy_path():
     assert gateway.calls[0]["expect_json"] is True
 
 
-def test_locale_json_payload_strips_fences_and_prose():
+def test_locate_json_payload_strips_fences_and_prose():
     wrapped = (
         "Here is your result:\n```json\n" + json.dumps(_payload()) + "\n```\nDone."
     )
