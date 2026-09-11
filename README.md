@@ -1,4 +1,4 @@
-# NexoraEngine
+# Nexora
 
 **Knowledge Graph Intelligence Engine** — turn documents into a queryable
 knowledge graph, then answer questions with grounded, citation-aware reasoning.
