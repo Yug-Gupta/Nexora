@@ -24,7 +24,7 @@ def _select_source() -> str | None:
         label_visibility="collapsed",
     )
     if picked != "Custom text" and st.button(
-        "Load this example into the editor", use_container_width=True
+        "Load this example into the editor", width="stretch"
     ):
         st.session_state["src_text"] = SAMPLE_DOCUMENTS[picked]
         st.session_state["src_label"] = picked
@@ -88,7 +88,7 @@ def _render_ingest_report(report: IngestReport) -> None:
                     for entity in report.entities
                 ],
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
             )
         else:
             st.info("No entities were extracted.")
@@ -105,7 +105,7 @@ def _render_ingest_report(report: IngestReport) -> None:
                     for rel in report.relations
                 ],
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
             )
         else:
             st.info("No relationships were extracted.")
@@ -143,9 +143,7 @@ def render() -> None:
             placeholder=_DEFAULT_LABEL,
         )
         st.caption("Used to name this source in the graph and in citations.")
-        run_ingest = st.button(
-            "Analyse and index", type="primary", use_container_width=True
-        )
+        run_ingest = st.button("Analyse and index", type="primary", width="stretch")
         with st.expander("What happens next?"):
             st.markdown(
                 "- The model returns structured JSON (entities + relations).\n"

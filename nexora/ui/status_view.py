@@ -33,6 +33,7 @@ def _render_probes(probes) -> None:
         render_raw(
             f"<div style='margin:0.35rem 0;'>{status_pill(probe.available)} "
             f"<b>{_escape(probe.component)}</b> &nbsp;-&nbsp; {_escape(probe.message)}"
+            f"</div>"
         )
         if probe.extra:
             with st.expander(f"Available models ({len(probe.extra)})"):

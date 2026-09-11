@@ -20,7 +20,7 @@ def _question_picker() -> None:
         help="Select an example to load it into the editor.",
     )
     if suggestion != "Custom question" and st.button(
-        "Use this suggestion", use_container_width=True
+        "Use this suggestion", width="stretch"
     ):
         st.session_state["question_text"] = suggestion
         st.rerun()
@@ -114,7 +114,7 @@ def render() -> None:
             ),
         )
         ask_clicked = st.form_submit_button(
-            "Get grounded answer", type="primary", use_container_width=True
+            "Get grounded answer", type="primary", width="stretch"
         )
 
     if ask_clicked:

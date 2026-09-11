@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker Compose drops the Ollama service; the stack is now Neo4j + the app.
 - Streamlit Community Cloud is supported via a secrets-to-environment bridge
   (`nexora/ui/state.py`).
+- Replaced the deprecated `use_container_width=True` on buttons and dataframes
+  with `width="stretch"`; the minimum Streamlit version is now `1.48.0`.
+- Fixed an unclosed `<div>` in the System status service-health rows.
 
 ### Planned
 - A pluggable provider interface so Gemini and other LLMs can be swapped freely.

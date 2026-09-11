@@ -132,7 +132,7 @@ def render_sidebar() -> None:
             )
 
             submitted = st.form_submit_button(
-                "Save and reconnect", type="primary", use_container_width=True
+                "Save and reconnect", type="primary", width="stretch"
             )
 
         if submitted:
@@ -153,7 +153,7 @@ def render_sidebar() -> None:
         if st.button(
             "Reset to environment defaults",
             help="Discard manual overrides and reload values from .env.",
-            use_container_width=True,
+            width="stretch",
         ):
             reset_settings()
             st.toast("Reloaded environment defaults.")
